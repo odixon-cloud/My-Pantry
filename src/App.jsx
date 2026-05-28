@@ -73,7 +73,28 @@ function App() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
+
+        const codeReader = new BrowserMultiFormatReader();
+
+        codeReader.decodeFromVideoElement(
+          videoRef.current,
+          (result) => {
+            if (result) {
+              const scannedCode = result.getText();
+
+              setBarcode(scannedCode);
+
+              stream
+                .getTracks()
+                .forEach((track) => track.stop());
+
+              setShowScanner(false);
+
+              alert("Barcode Scanned: " + scannedCode);
+            }
+          }
+        );
       }
     } catch (error) {
       console.log(error);
@@ -133,18 +154,9 @@ function App() {
 >
   Close Scanner
 </button>
-
   </div>
 )}
-  onClick={() => {
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject
-        .getTracks()
-        .forEach((track) => track.stop());
-    }
-
-    setShowScanner(false);
-  }}
+  
 
 
       <div className="add-item-row">
