@@ -112,12 +112,12 @@ function App() {
 }
 
   function deleteItem(indexToDelete) {
-    const updatedItems = items.filter(
-      (_, index) => index !== indexToDelete
-    );
+  const updatedItems = items.filter(
+    (_, index) => index !== indexToDelete
+  );
 
-    setItems(updatedItems);
-  }
+  setItems(updatedItems);
+}
 
   return (
     <div className="container">
@@ -198,7 +198,7 @@ function App() {
 
           <span>{item.location}</span>
 
-          <button onClick={() => deleteItem(index)}>
+          <button onClick={() => deleteItem(item.id)}>
             Delete
           </button>
         </div>
