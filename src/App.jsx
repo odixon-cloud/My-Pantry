@@ -1,5 +1,5 @@
-
 import { useState, useEffect } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import "./App.css";
 import { supabase } from "./supabaseClient";
 
@@ -7,6 +7,7 @@ function App() {
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [location, setLocation] = useState("Pantry");
+  const [barcode, setBarcode] = useState("");
   const [items, setItems] = useState([]);
 
   useEffect(() => {
@@ -33,10 +34,11 @@ function App() {
     }
 
     const newItem = {
-      name: itemName,
-      quantity: quantity,
-      location: location,
-    };
+  name: itemName,
+  quantity: quantity,
+  location: location,
+  barcode: barcode,
+};
 
     const { data, error } = await supabase
       .from("pantry_items")
@@ -56,6 +58,22 @@ function App() {
     setLocation("Pantry");
   }
 
+  async function scanBarcode() {
+  try {
+    const codeReader = new BrowserMultiFormatReader();
+
+    const result = await codeReader.decodeOnceFromVideoDevice();
+
+    setBarcode(result.getText());
+
+    alert("Barcode Scanned: " + result.getText());
+  }catch (error) {
+  console.log(error);
+  alert(error?.message || error?.name || "Unknown Error");
+}
+}
+  
+
   function deleteItem(indexToDelete) {
     const updatedItems = items.filter(
       (_, index) => index !== indexToDelete
@@ -66,13 +84,11 @@ function App() {
 
   return (
     <div className="container">
-
       <h1>My Pantry</h1>
 
       <h2>Add Item</h2>
 
       <div className="add-item-row">
-
         <input
           placeholder="Item name"
           value={itemName}
@@ -96,10 +112,13 @@ function App() {
           <option>Counter</option>
         </select>
 
+        <button onClick={scanBarcode}>
+          Scan Barcode
+        </button>
+
         <button onClick={addItem}>
           Add Item
         </button>
-
       </div>
 
       <h2>Inventory</h2>
@@ -111,9 +130,8 @@ function App() {
         <span>Action</span>
       </div>
 
-      {items.map((item, index) => (
+            {items.map((item, index) => (
         <div key={item.id} className="inventory-item">
-
           <span>{item.name}</span>
 
           <span>{item.quantity}</span>
@@ -123,10 +141,8 @@ function App() {
           <button onClick={() => deleteItem(index)}>
             Delete
           </button>
-
         </div>
-      ))}
-
+            ))}
     </div>
   );
 }
