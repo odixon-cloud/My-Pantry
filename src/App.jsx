@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+import { useState, useEffect } from "react";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import "./App.css";
 import { supabase } from "./supabaseClient";
 
@@ -9,7 +9,6 @@ function App() {
   const [location, setLocation] = useState("Pantry");
   const [barcode, setBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
-  const videoRef = useRef(null);  
   const [items, setItems] = useState([]);
 
   useEffect(() => {
@@ -60,47 +59,31 @@ function App() {
     setLocation("Pantry");
   }
 
-  async function scanBarcode() {
+  function scanBarcode() {
   setShowScanner(true);
 
-  setTimeout(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-        },
-      });
+  setTimeout(() => {
+    const scanner = new Html5QrcodeScanner(
+      "reader",
+      {
+        fps: 10,
+        qrbox: 250,
+      },
+      false
+    );
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+    scanner.render(
+      (decodedText) => {
+        setBarcode(decodedText);
 
-        const codeReader = new BrowserMultiFormatReader();
+        scanner.clear();
 
-        codeReader.decodeFromVideoElement(
-          videoRef.current,
-          (result) => {
-            if (result) {
-              alert("FOUND SOMETHING");
-              const scannedCode = result.getText();
+        setShowScanner(false);
 
-              setBarcode(scannedCode);
-
-              stream
-                .getTracks()
-                .forEach((track) => track.stop());
-
-              setShowScanner(false);
-
-              alert("Barcode Scanned: " + scannedCode);
-            }
-          }
-        );
-      }
-    } catch (error) {
-      console.log(error);
-      alert(error.message);
-    }
+        alert("Barcode Scanned: " + decodedText);
+      },
+      () => {}
+    );
   }, 100);
 }
   
@@ -131,28 +114,10 @@ function App() {
   >
     <h3>Scanner Window</h3>
 
-    <video
-      ref={videoRef}
-      style={{
-        width: "100%",
-        maxWidth: "400px",
-        border: "2px solid white",
-      }}
-    />
+    <div id="reader"></div>
 
-    <br />
 
-    <button
-  onClick={() => {
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject
-        .getTracks()
-        .forEach((track) => track.stop());
-    }
-
-    setShowScanner(false);
-  }}
->
+   <button onClick={() => setShowScanner(false)}>
   Close Scanner
 </button>
   </div>
