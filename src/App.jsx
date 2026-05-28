@@ -80,6 +80,34 @@ function App() {
 
       <h2>Add Item</h2>
       <p>Barcode: {barcode}</p>
+      {showScanner && (
+  <div
+    style={{
+      background: "black",
+      color: "white",
+      padding: "20px",
+      marginBottom: "20px",
+      textAlign: "center",
+    }}
+  >
+    <h3>Scanner Window</h3>
+
+    <video
+      ref={videoRef}
+      style={{
+        width: "100%",
+        maxWidth: "400px",
+        border: "2px solid white",
+      }}
+    />
+
+    <br />
+
+    <button onClick={() => setShowScanner(false)}>
+      Close Scanner
+    </button>
+  </div>
+)}
 
       <div className="add-item-row">
         <input
