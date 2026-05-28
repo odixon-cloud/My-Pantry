@@ -111,12 +111,19 @@ function App() {
   }
 }
 
-  function deleteItem(indexToDelete) {
-  const updatedItems = items.filter(
-    (_, index) => index !== indexToDelete
-  );
+  async function deleteItem(idToDelete) {
+  const { error } = await supabase
+    .from("pantry_items")
+    .delete()
+    .eq("id", idToDelete);
 
-  setItems(updatedItems);
+  if (error) {
+    console.log(error);
+    alert(error.message);
+    return;
+  }
+
+  setItems(items.filter((item) => item.id !== idToDelete));
 }
 
   return (
