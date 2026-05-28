@@ -60,9 +60,26 @@ function App() {
     setLocation("Pantry");
   }
 
-  function scanBarcode() {
+  async function scanBarcode() {
   setShowScanner(true);
-  alert("Scanner mode enabled");
+
+  setTimeout(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+        },
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error.message);
+    }
+  }, 100);
 }
   
 
@@ -103,11 +120,32 @@ function App() {
 
     <br />
 
-    <button onClick={() => setShowScanner(false)}>
-      Close Scanner
-    </button>
+    <button
+  onClick={() => {
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+    }
+
+    setShowScanner(false);
+  }}
+>
+  Close Scanner
+</button>
+
   </div>
 )}
+  onClick={() => {
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+    }
+
+    setShowScanner(false);
+  }}
+
 
       <div className="add-item-row">
         <input
