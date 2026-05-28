@@ -81,6 +81,7 @@ function App() {
           videoRef.current,
           (result) => {
             if (result) {
+              alert("FOUND SOMETHING");
               const scannedCode = result.getText();
 
               setBarcode(scannedCode);
