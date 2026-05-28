@@ -1,4 +1,6 @@
+
 import { useState, useEffect } from "react";
+import "./App.css";
 import { supabase } from "./supabaseClient";
 
 function App() {
@@ -42,10 +44,10 @@ function App() {
       .select();
 
     if (error) {
-  console.log(error);
-  alert(error.message);
-  return;
-}
+      console.log(error);
+      alert(error.message);
+      return;
+    }
 
     setItems([...items, data[0]]);
 
@@ -64,48 +66,67 @@ function App() {
 
   return (
     <div className="container">
+
       <h1>My Pantry</h1>
 
       <h2>Add Item</h2>
 
-      <input
-        placeholder="Item name"
-        value={itemName}
-        onChange={(e) => setItemName(e.target.value)}
-      />
+      <div className="add-item-row">
 
-      <input
-        placeholder="Quantity"
-        value={quantity}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
+        <input
+          placeholder="Item name"
+          value={itemName}
+          onChange={(e) => setItemName(e.target.value)}
+        />
 
-      <select
-        value={location}
-        onChange={(e) => setLocation(e.target.value)}
-      >
-        <option>Pantry</option>
-        <option>Fridge</option>
-        <option>Freezer</option>
-        <option>Office Fridge</option>
-        <option>Counter</option>
-      </select>
+        <input
+          placeholder="Quantity"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+        />
 
-      <button onClick={addItem}>Add Item</button>
+        <select
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+        >
+          <option>Pantry</option>
+          <option>Fridge</option>
+          <option>Freezer</option>
+          <option>Office Fridge</option>
+          <option>Counter</option>
+        </select>
+
+        <button onClick={addItem}>
+          Add Item
+        </button>
+
+      </div>
 
       <h2>Inventory</h2>
 
-      <ul>
-        {items.map((item, index) => (
-          <li key={item.id}>
-            {item.name} - {item.quantity} - {item.location}
+      <div className="inventory-header">
+        <span>Item</span>
+        <span>Quantity</span>
+        <span>Location</span>
+        <span>Action</span>
+      </div>
 
-            <button onClick={() => deleteItem(index)}>
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
+      {items.map((item, index) => (
+        <div key={item.id} className="inventory-item">
+
+          <span>{item.name}</span>
+
+          <span>{item.quantity}</span>
+
+          <span>{item.location}</span>
+
+          <button onClick={() => deleteItem(index)}>
+            Delete
+          </button>
+
+        </div>
+      ))}
+
     </div>
   );
 }
