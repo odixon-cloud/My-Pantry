@@ -62,6 +62,7 @@ function App() {
 
   function scanBarcode() {
   setShowScanner(true);
+  alert("Scanner mode enabled");
 }
   
 
