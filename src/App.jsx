@@ -73,20 +73,43 @@ function App() {
     );
 
     scanner.render(
-      (decodedText) => {
-        setBarcode(decodedText);
+  (decodedText) => {
+    setBarcode(decodedText);
 
-        scanner.clear();
+    lookupBarcode(decodedText);
 
-        setShowScanner(false);
+    scanner.clear();
 
-        alert("Barcode Scanned: " + decodedText);
-      },
-      () => {}
-    );
+    setShowScanner(false);
+
+    alert("Barcode Scanned: " + decodedText);
+  },
+  () => {}
+);
   }, 100);
 }
-  
+  async function lookupBarcode(code) {
+  try {
+    const response = await fetch(
+      `https://world.openfoodfacts.org/api/v0/product/${code}.json`
+    );
+
+    const data = await response.json();
+
+    if (
+      data.status === 1 &&
+      data.product &&
+      data.product.product_name
+    ) {
+      setItemName(data.product.product_name);
+    } else {
+      alert("Product not found");
+    }
+  } catch (error) {
+    console.log(error);
+    alert("Lookup failed");
+  }
+}
 
   function deleteItem(indexToDelete) {
     const updatedItems = items.filter(
