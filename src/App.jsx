@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import "./App.css";
 import { supabase } from "./supabaseClient";
@@ -8,6 +8,8 @@ function App() {
   const [quantity, setQuantity] = useState("");
   const [location, setLocation] = useState("Pantry");
   const [barcode, setBarcode] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
+  const videoRef = useRef(null);  
   const [items, setItems] = useState([]);
 
   useEffect(() => {
@@ -58,19 +60,8 @@ function App() {
     setLocation("Pantry");
   }
 
-  async function scanBarcode() {
-  try {
-    const codeReader = new BrowserMultiFormatReader();
-
-    const result = await codeReader.decodeOnceFromVideoDevice();
-
-    setBarcode(result.getText());
-
-    alert("Barcode Scanned: " + result.getText());
-  }catch (error) {
-  console.log(error);
-  alert(error?.message || error?.name || "Unknown Error");
-}
+  function scanBarcode() {
+  setShowScanner(true);
 }
   
 
@@ -87,6 +78,7 @@ function App() {
       <h1>My Pantry</h1>
 
       <h2>Add Item</h2>
+      <p>Barcode: {barcode}</p>
 
       <div className="add-item-row">
         <input
