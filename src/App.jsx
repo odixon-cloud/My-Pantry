@@ -7,6 +7,7 @@ function App() {
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState(""); 
   const [location, setLocation] = useState("Pantry");
+  const [category, setCategory] = useState("Other");
   const [barcode, setBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [items, setItems] = useState([]);
@@ -39,6 +40,7 @@ function App() {
   quantity: quantity,
   location: location,
   barcode: barcode,
+  category: category,
 };
 
     const { data, error } = await supabase
@@ -61,6 +63,7 @@ if (barcode && itemName) {
       {
         barcode: barcode,
         product_name: itemName,
+        category: category,
       },
     ]);
 }
@@ -68,6 +71,7 @@ if (barcode && itemName) {
 setItemName("");
 setQuantity("");
 setLocation("Pantry");
+setCategory("Other");
 setBarcode("");
   }
 
@@ -216,6 +220,23 @@ setBarcode("");
           <option>Counter</option>
         </select>
 
+        <select
+           value={category}
+          onChange={(e) => setCategory(e.target.value)}
+>
+           <option>Baking</option>
+           <option>Beverages</option>
+           <option>Canned Goods</option>
+          <option>Condiments</option>
+          <option>Dairy</option>
+          <option>Frozen</option>
+          <option>Meat</option>
+          <option>Produce</option>
+          <option>Snacks</option>
+         <option>Spices</option>
+         <option>Other</option>
+        </select>
+
         <button onClick={scanBarcode}>
           Scan Barcode
         </button>
@@ -228,11 +249,12 @@ setBarcode("");
       <h2>Inventory</h2>
 
       <div className="inventory-header">
-        <span>Item</span>
-        <span>Quantity</span>
-        <span>Location</span>
-        <span>Action</span>
-      </div>
+  <span>Item</span>
+  <span>Quantity</span>
+  <span>Location</span>
+  <span>Category</span>
+  <span>Action</span>
+</div>
 
             {items.map((item, index) => (
         <div key={item.id} className="inventory-item">
@@ -242,7 +264,9 @@ setBarcode("");
 
           <span>{item.location}</span>
 
-          <button onClick={() => deleteItem(item.id)}>
+<span>{item.category}</span>
+
+<button onClick={() => deleteItem(item.id)}>
             Delete
           </button>
         </div>
