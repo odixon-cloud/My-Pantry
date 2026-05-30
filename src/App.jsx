@@ -64,6 +64,33 @@ function App() {
     return;
   }
 
+  const { data: existingItem } = await supabase
+  .from("pantry_items")
+  .select("*")
+  .eq("name", itemName)
+  .eq("location", location)
+  .eq("category", category)
+  .maybeSingle();
+
+if (existingItem) {
+  const newQuantity =
+    parseInt(existingItem.quantity || 0) +
+    parseInt(quantity || 0);
+
+  const { error } = await supabase
+    .from("pantry_items")
+    .update({
+      quantity: newQuantity.toString(),
+    })
+    .eq("id", existingItem.id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  fetchItems();
+} else {
   const newItem = {
     name: itemName,
     quantity: quantity,
@@ -83,6 +110,7 @@ function App() {
   }
 
   setItems([...items, data[0]]);
+}
 
   if (barcode && itemName) {
     await supabase
