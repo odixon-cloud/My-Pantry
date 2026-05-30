@@ -11,6 +11,7 @@ function App() {
   const [barcode, setBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [items, setItems] = useState([]);
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     fetchItems();
@@ -31,41 +32,70 @@ function App() {
   }
 
   async function addItem() {
-    if (itemName.trim() === "" || quantity.trim() === "") {
-      return;
-    }
+  if (itemName.trim() === "" || quantity.trim() === "") {
+    return;
+  }
 
-    const newItem = {
-  name: itemName,
-  quantity: quantity,
-  location: location,
-  barcode: barcode,
-  category: category,
-};
-
-    const { data, error } = await supabase
+  if (editingId) {
+    const { error } = await supabase
       .from("pantry_items")
-      .insert([newItem])
-      .select();
+      .update({
+        name: itemName,
+        quantity: quantity,
+        location: location,
+        category: category,
+      })
+      .eq("id", editingId);
 
     if (error) {
-      console.log(error);
       alert(error.message);
       return;
     }
 
-    setItems([...items, data[0]]);
+    fetchItems();
 
-if (barcode && itemName) {
-  await supabase
-    .from("barcode_lookup")
-    .update({
-      product_name: itemName,
-      category: category,
-      location: location,
-    })
-    .eq("barcode", barcode);
-}
+    setEditingId(null);
+    setItemName("");
+    setQuantity("");
+    setLocation("Pantry");
+    setCategory("Other");
+    setBarcode("");
+
+    return;
+  }
+
+  const newItem = {
+    name: itemName,
+    quantity: quantity,
+    location: location,
+    barcode: barcode,
+    category: category,
+  };
+
+  const { data, error } = await supabase
+    .from("pantry_items")
+    .insert([newItem])
+    .select();
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  setItems([...items, data[0]]);
+
+  if (barcode && itemName) {
+    await supabase
+      .from("barcode_lookup")
+      .update({
+        product_name: itemName,
+        category: category,
+        location: location,
+      })
+      .eq("barcode", barcode);
+  }
+
+  
 
 setItemName("");
 setQuantity("");
@@ -156,7 +186,14 @@ setBarcode("");
   }
 }
 
-   
+   function editItem(item) {
+  setEditingId(item.id);
+  setItemName(item.name);
+  setQuantity(item.quantity);
+  setLocation(item.location);
+  setCategory(item.category);
+  setBarcode(item.barcode || "");
+}
 
   async function deleteItem(idToDelete) {
   const { error } = await supabase
@@ -248,8 +285,8 @@ setBarcode("");
         </button>
 
         <button onClick={addItem}>
-          Add Item
-        </button>
+  {editingId ? "Update Item" : "Add Item"}
+</button>
       </div>
 
       <h2>Inventory</h2>
@@ -272,9 +309,13 @@ setBarcode("");
 
 <span>{item.category}</span>
 
+<button onClick={() => editItem(item)}>
+  Edit
+</button>
+
 <button onClick={() => deleteItem(item.id)}>
-            Delete
-          </button>
+  Delete
+</button>
         </div>
             ))}
     </div>
