@@ -59,13 +59,11 @@ function App() {
 if (barcode && itemName) {
   await supabase
     .from("barcode_lookup")
-    .upsert([
-      {
-        barcode: barcode,
-        product_name: itemName,
-        category: category,
-      },
-    ]);
+    .update({
+      product_name: itemName,
+      category: category,
+    })
+    .eq("barcode", barcode);
 }
 
 setItemName("");
