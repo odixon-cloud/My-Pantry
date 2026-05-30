@@ -11,7 +11,9 @@ function App() {
   const [barcode, setBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [items, setItems] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState(null);
+  
 
   useEffect(() => {
     fetchItems();
@@ -318,7 +320,17 @@ setBarcode("");
       </div>
 
       <h2>Inventory</h2>
-
+<input
+  type="text"
+  placeholder="Search inventory..."
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+  style={{
+    marginBottom: "10px",
+    width: "100%",
+    padding: "8px",
+  }}
+/>
       <div className="inventory-header">
   <span>Item</span>
   <span>Quantity</span>
@@ -327,7 +339,13 @@ setBarcode("");
   <span>Action</span>
 </div>
 
-            {items.map((item, index) => (
+            {items
+  .filter((item) =>
+    item.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase())
+  )
+  .map((item, index) => (
         <div key={item.id} className="inventory-item">
           <span>{item.name}</span>
 
