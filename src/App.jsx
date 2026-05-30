@@ -114,9 +114,14 @@ setBarcode("");
       .single();
 
     if (cachedItem) {
-      setItemName(cachedItem.product_name);
-      return;
-    }
+  setItemName(cachedItem.product_name);
+
+  if (cachedItem.category) {
+    setCategory(cachedItem.category);
+  }
+
+  return;
+}
 
     const response = await fetch(
       `https://world.openfoodfacts.org/api/v0/product/${code}.json`
