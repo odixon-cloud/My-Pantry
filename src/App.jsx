@@ -62,6 +62,7 @@ if (barcode && itemName) {
     .update({
       product_name: itemName,
       category: category,
+      location: location,
     })
     .eq("barcode", barcode);
 }
@@ -117,7 +118,9 @@ setBarcode("");
   if (cachedItem.category) {
     setCategory(cachedItem.category);
   }
-
+ if (cachedItem.location) {
+    setLocation(cachedItem.location);
+  }
   return;
 }
 
