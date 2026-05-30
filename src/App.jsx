@@ -5,7 +5,7 @@ import { supabase } from "./supabaseClient";
 
 function App() {
   const [itemName, setItemName] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState(""); 
   const [location, setLocation] = useState("Pantry");
   const [barcode, setBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
@@ -90,6 +90,18 @@ function App() {
 }
   async function lookupBarcode(code) {
   try {
+
+    const { data: cachedItem } = await supabase
+      .from("barcode_lookup")
+      .select("*")
+      .eq("barcode", code)
+      .single();
+
+    if (cachedItem) {
+      setItemName(cachedItem.product_name);
+      return;
+    }
+
     const response = await fetch(
       `https://world.openfoodfacts.org/api/v0/product/${code}.json`
     );
@@ -102,14 +114,27 @@ function App() {
       data.product.product_name
     ) {
       setItemName(data.product.product_name);
+
+      await supabase
+        .from("barcode_lookup")
+        .insert([
+          {
+            barcode: code,
+            product_name: data.product.product_name,
+          },
+        ]);
+
     } else {
       alert("Product not found");
     }
+
   } catch (error) {
     console.log(error);
     alert("Lookup failed");
   }
 }
+
+   
 
   async function deleteItem(idToDelete) {
   const { error } = await supabase
