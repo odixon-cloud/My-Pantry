@@ -54,9 +54,21 @@ function App() {
 
     setItems([...items, data[0]]);
 
-    setItemName("");
-    setQuantity("");
-    setLocation("Pantry");
+if (barcode && itemName) {
+  await supabase
+    .from("barcode_lookup")
+    .upsert([
+      {
+        barcode: barcode,
+        product_name: itemName,
+      },
+    ]);
+}
+
+setItemName("");
+setQuantity("");
+setLocation("Pantry");
+setBarcode("");
   }
 
   function scanBarcode() {
