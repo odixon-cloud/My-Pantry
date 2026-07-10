@@ -8,24 +8,37 @@ body {
 
 .container {
   max-width: 900px;
-  margin: auto;
+  margin: 0 auto;
   background: #1b2333;
-  padding: 25px;
+  padding: 28px;
   border-radius: 12px;
+  box-sizing: border-box;
 }
 
 h1 {
-  margin-top: 0;
+  margin: 0 0 10px;
   text-align: center;
   font-size: 48px;
 }
 
 h2 {
   text-align: center;
+  margin: 12px 0;
+}
+
+p {
+  text-align: center;
+}
+
+input,
+select,
+button {
+  font: inherit;
 }
 
 input,
 select {
+  width: 100%;
   padding: 10px;
   box-sizing: border-box;
   border: 1px solid #555;
@@ -35,8 +48,8 @@ select {
 }
 
 button {
-  padding: 10px;
-  background-color: #FA5107;
+  padding: 10px 16px;
+  background-color: #fa5107;
   color: white;
   border: none;
   border-radius: 6px;
@@ -49,20 +62,67 @@ button:hover {
 
 .add-item-row {
   display: grid;
-  grid-template-columns: 3fr 1fr 2fr 1fr;
-  gap: 10px;
-  margin-bottom: 25px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  margin: 24px 0 28px;
+}
+
+.add-item-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: bold;
+  text-align: left;
+}
+
+.add-item-row button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.shopping-list-controls {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.shopping-list-controls h2 {
+  margin-bottom: 10px;
+}
+
+.shopping-list-controls button {
+  margin: 4px;
+}
+
+.shopping-list {
+  margin-top: 20px;
+  padding: 18px;
+  background: #222c3f;
+  border-radius: 10px;
+}
+
+.shopping-list-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1.5fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #445;
+}
+
+.shopping-list-item:last-child {
+  border-bottom: none;
 }
 
 .inventory-header,
 .inventory-item {
   display: grid;
-  grid-template-columns: 300px 100px 180px 100px;
-  gap: 20px;
+  grid-template-columns: 2fr 0.8fr 0.8fr 1fr 1.2fr 1.2fr 1.5fr;
+  gap: 12px;
   align-items: center;
-  padding: 12px;
-  width: fit-content;
-  margin: auto;
+  padding: 12px 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .inventory-header {
@@ -78,4 +138,77 @@ button:hover {
 .inventory-item span,
 .inventory-header span {
   text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.inventory-item > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  body {
+    padding: 10px;
+  }
+
+  .container {
+    padding: 18px;
+  }
+
+  h1 {
+    font-size: 38px;
+  }
+
+  .add-item-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .shopping-list-item {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .inventory-header {
+    display: none;
+  }
+
+  .inventory-item {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+    background: #222c3f;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 12px;
+  }
+
+  .inventory-item > div {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .add-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .shopping-list-controls button {
+    width: 100%;
+    margin: 5px 0;
+  }
+
+  .shopping-list-item {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-item {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-item > div {
+    grid-column: auto;
+  }
+
+  .inventory-item button {
+    flex: 1;
+  }
 }
