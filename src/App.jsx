@@ -16,6 +16,9 @@ function App() {
   const [showInventory, setShowInventory] = useState(false);
   const [priority, setPriority] = useState("3");
   const [shoppingListType, setShoppingListType] = useState("");
+  const [selectedPurchasedItems, setSelectedPurchasedItems] = useState({});
+  const [purchasedQuantities, setPurchasedQuantities] = useState({});
+  const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -373,6 +376,98 @@ function App() {
       });
   }
 
+  function getSuggestedBuyAmount(item) {
+    return Math.max(
+      0,
+      Number(item.target_quantity) - Number(item.quantity)
+    );
+  }
+
+  function togglePurchasedItem(item) {
+    const isCurrentlySelected = Boolean(selectedPurchasedItems[item.id]);
+
+    setSelectedPurchasedItems((current) => ({
+      ...current,
+      [item.id]: !isCurrentlySelected,
+    }));
+
+    if (!isCurrentlySelected && purchasedQuantities[item.id] === undefined) {
+      setPurchasedQuantities((current) => ({
+        ...current,
+        [item.id]: getSuggestedBuyAmount(item),
+      }));
+    }
+  }
+
+  function updatePurchasedQuantity(itemId, value) {
+    setPurchasedQuantities((current) => ({
+      ...current,
+      [itemId]: value,
+    }));
+  }
+
+  async function addPurchasedItemsToPantry() {
+    const selectedItems = shoppingListItems.filter(
+      (item) => selectedPurchasedItems[item.id]
+    );
+
+    if (selectedItems.length === 0) {
+      alert("Check at least one purchased item first.");
+      return;
+    }
+
+    for (const item of selectedItems) {
+      const purchasedAmount = Number.parseInt(
+        purchasedQuantities[item.id],
+        10
+      );
+
+      if (Number.isNaN(purchasedAmount) || purchasedAmount <= 0) {
+        alert(`Enter a purchased quantity greater than 0 for ${item.name}.`);
+        return;
+      }
+    }
+
+    setSavingPurchasedItems(true);
+
+    try {
+      const updateResults = await Promise.all(
+        selectedItems.map(async (item) => {
+          const currentQuantity = Number.parseInt(item.quantity || "0", 10);
+          const purchasedAmount = Number.parseInt(
+            purchasedQuantities[item.id],
+            10
+          );
+          const newQuantity = currentQuantity + purchasedAmount;
+
+          return supabase
+            .from("pantry_items")
+            .update({
+              quantity: newQuantity.toString(),
+            })
+            .eq("id", item.id);
+        })
+      );
+
+      const failedUpdate = updateResults.find((result) => result.error);
+
+      if (failedUpdate) {
+        alert(failedUpdate.error.message);
+        return;
+      }
+
+      await fetchItems();
+      setSelectedPurchasedItems({});
+      setPurchasedQuantities({});
+      alert("Purchased items were added to your pantry.");
+    } catch (error) {
+      console.log(error);
+      alert("The purchased items could not be added.");
+    } finally {
+      setSavingPurchasedItems(false);
+    }
+  }
+
   const shoppingListItems = getShoppingListItems();
 
   return (
@@ -515,29 +610,71 @@ function App() {
           {shoppingListItems.length === 0 ? (
             <p>No items are currently needed for this list.</p>
           ) : (
-            shoppingListItems.map((item) => {
-              const buyAmount =
-                Number(item.target_quantity) - Number(item.quantity);
+            <>
+              <div className="shopping-list-header">
+                <span>Bought</span>
+                <span>Item</span>
+                <span>Suggested</span>
+                <span>Purchased</span>
+                <span>Category</span>
+                <span>Priority</span>
+              </div>
 
-              return (
-                <div key={item.id} className="shopping-list-item">
-                  <span>{item.name}</span>
-                  <span>Buy: {buyAmount}</span>
-                  <span>{item.category}</span>
-                  <span>{getPriorityLabel(item.priority)} Priority</span>
-                </div>
-              );
-            })
+              {shoppingListItems.map((item) => {
+                const suggestedBuyAmount = getSuggestedBuyAmount(item);
+                const purchasedValue =
+                  purchasedQuantities[item.id] ?? suggestedBuyAmount;
+
+                return (
+                  <div key={item.id} className="shopping-list-item">
+                    <input
+                      className="shopping-checkbox"
+                      type="checkbox"
+                      checked={Boolean(selectedPurchasedItems[item.id])}
+                      onChange={() => togglePurchasedItem(item)}
+                      aria-label={`Mark ${item.name} as purchased`}
+                    />
+
+                    <span>{item.name}</span>
+                    <span>Buy: {suggestedBuyAmount}</span>
+
+                    <input
+                      className="purchased-quantity-input"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={purchasedValue}
+                      onChange={(e) =>
+                        updatePurchasedQuantity(item.id, e.target.value)
+                      }
+                    />
+
+                    <span>{item.category}</span>
+                    <span>{getPriorityLabel(item.priority)}</span>
+                  </div>
+                );
+              })}
+
+              <button
+                className="add-purchased-button"
+                onClick={addPurchasedItemsToPantry}
+                disabled={savingPurchasedItems}
+              >
+                {savingPurchasedItems
+                  ? "Adding Items..."
+                  : "Add Purchased Items to Pantry"}
+              </button>
+            </>
           )}
         </div>
       )}
 
       <button
-  onClick={() => setShowInventory(!showInventory)}
-  style={{ marginTop: "30px" }}
->
-  {showInventory ? "Hide Inventory" : "Show Inventory"}
-</button>
+        onClick={() => setShowInventory(!showInventory)}
+        style={{ marginTop: "30px" }}
+      >
+        {showInventory ? "Hide Inventory" : "Show Inventory"}
+      </button>
 
       {showInventory && (
         <>
