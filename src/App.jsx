@@ -19,6 +19,11 @@ function App() {
   const [selectedPurchasedItems, setSelectedPurchasedItems] = useState({});
   const [purchasedQuantities, setPurchasedQuantities] = useState({});
   const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
+  const [scannerMode, setScannerMode] = useState("add");
+  const [useSearchTerm, setUseSearchTerm] = useState("");
+  const [selectedUseItem, setSelectedUseItem] = useState(null);
+  const [useQuantity, setUseQuantity] = useState("1");
+  const [usingItem, setUsingItem] = useState(false);
   const scannerRef = useRef(null);
 
   useEffect(() => {
@@ -223,7 +228,8 @@ function App() {
     );
   }
 
-  function scanBarcode() {
+  function scanBarcode(mode = "add") {
+    setScannerMode(mode);
     setShowScanner(true);
 
     setTimeout(async () => {
@@ -237,9 +243,27 @@ function App() {
       };
 
       const onScanSuccess = async (decodedText) => {
+        await stopScanner();
+
+        if (mode === "use") {
+          const matchingItem = items.find(
+            (item) => String(item.barcode || "") === String(decodedText)
+          );
+
+          if (matchingItem) {
+            setSelectedUseItem(matchingItem);
+            setUseSearchTerm(matchingItem.name || "");
+            setUseQuantity("1");
+            alert("Item found: " + matchingItem.name);
+          } else {
+            alert("That barcode is not currently in your pantry.");
+          }
+
+          return;
+        }
+
         setBarcode(decodedText);
         await lookupBarcode(decodedText);
-        await stopScanner();
         alert("Barcode Scanned: " + decodedText);
       };
 
@@ -531,6 +555,75 @@ function App() {
     }
   }
 
+  function selectItemToUse(item) {
+    setSelectedUseItem(item);
+    setUseSearchTerm(item.name || "");
+    setUseQuantity("1");
+  }
+
+  function clearUseItem() {
+    setSelectedUseItem(null);
+    setUseSearchTerm("");
+    setUseQuantity("1");
+  }
+
+  async function useSelectedItem() {
+    if (!selectedUseItem) {
+      alert("Search for an item or scan its barcode first.");
+      return;
+    }
+
+    const amountUsed = Number.parseFloat(useQuantity);
+    const currentQuantity = Number.parseFloat(selectedUseItem.quantity || "0");
+
+    if (Number.isNaN(amountUsed) || amountUsed <= 0) {
+      alert("Enter an amount greater than 0.");
+      return;
+    }
+
+    if (amountUsed > currentQuantity) {
+      const confirmUseAll = window.confirm(
+        `You only have ${currentQuantity} of ${selectedUseItem.name}. Set it to 0?`
+      );
+
+      if (!confirmUseAll) {
+        return;
+      }
+    }
+
+    const newQuantity = Math.max(0, currentQuantity - amountUsed);
+
+    setUsingItem(true);
+
+    const { error } = await supabase
+      .from("pantry_items")
+      .update({
+        quantity: newQuantity.toString(),
+      })
+      .eq("id", selectedUseItem.id);
+
+    setUsingItem(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await fetchItems();
+    clearUseItem();
+    alert("Inventory updated.");
+  }
+
+  const matchingUseItems = useSearchTerm.trim()
+    ? items
+        .filter((item) =>
+          (item.name || "")
+            .toLowerCase()
+            .includes(useSearchTerm.trim().toLowerCase())
+        )
+        .slice(0, 8)
+    : [];
+
   const shoppingListItems = getShoppingListItems();
 
   return (
@@ -551,7 +644,7 @@ function App() {
             textAlign: "center",
           }}
         >
-          <h3>Scanner Window</h3>
+          <h3>{scannerMode === "use" ? "Scan Item to Use" : "Scanner Window"}</h3>
 
           <div id="reader"></div>
 
@@ -560,6 +653,68 @@ function App() {
           </button>
         </div>
       )}
+
+      <div className="use-item-section">
+        <h2>Use Item</h2>
+
+        <div className="use-item-search-row">
+          <input
+            type="text"
+            placeholder="Search for an item..."
+            value={useSearchTerm}
+            onChange={(e) => {
+              setUseSearchTerm(e.target.value);
+              setSelectedUseItem(null);
+            }}
+          />
+
+          <button onClick={() => scanBarcode("use")}>
+            Scan Item to Use
+          </button>
+        </div>
+
+        {!selectedUseItem && matchingUseItems.length > 0 && (
+          <div className="use-search-results">
+            {matchingUseItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => selectItemToUse(item)}
+              >
+                {item.name} — Current: {item.quantity}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedUseItem && (
+          <div className="selected-use-item">
+            <div>
+              <strong>{selectedUseItem.name}</strong>
+              <span>Current quantity: {selectedUseItem.quantity}</span>
+            </div>
+
+            <label>
+              Amount Used
+              <input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={useQuantity}
+                onChange={(e) => setUseQuantity(e.target.value)}
+              />
+            </label>
+
+            <button onClick={useSelectedItem} disabled={usingItem}>
+              {usingItem ? "Updating..." : "Remove from Inventory"}
+            </button>
+
+            <button type="button" onClick={clearUseItem}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="add-item-row">
         <label>
@@ -629,7 +784,7 @@ function App() {
           </select>
         </label>
 
-        <button onClick={scanBarcode}>
+        <button onClick={() => scanBarcode("add")}>
           Scan Barcode
         </button>
 
