@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { useEffect, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import "./App.css";
 import { supabase } from "./supabaseClient";
 
@@ -19,6 +19,7 @@ function App() {
   const [selectedPurchasedItems, setSelectedPurchasedItems] = useState({});
   const [purchasedQuantities, setPurchasedQuantities] = useState({});
   const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
+  const scannerRef = useRef(null);
 
   useEffect(() => {
     fetchItems();
@@ -192,30 +193,95 @@ function App() {
     }
   }
 
+  async function stopScanner() {
+    const scanner = scannerRef.current;
+
+    if (scanner) {
+      try {
+        if (scanner.isScanning) {
+          await scanner.stop();
+        }
+
+        await scanner.clear();
+      } catch (error) {
+        console.log("Scanner cleanup error:", error);
+      }
+
+      scannerRef.current = null;
+    }
+
+    setShowScanner(false);
+  }
+
+  function findRearCamera(cameras) {
+    const rearCameraWords =
+      /back|rear|environment|world|后置|後置|背面|trasera|trás|arrière|rück/i;
+
+    return (
+      cameras.find((camera) => rearCameraWords.test(camera.label || "")) ||
+      cameras[cameras.length - 1]
+    );
+  }
+
   function scanBarcode() {
     setShowScanner(true);
 
-    setTimeout(() => {
-      const scanner = new Html5QrcodeScanner(
-        "reader",
-        {
-          fps: 10,
-          qrbox: 250,
-        },
-        false
-      );
+    setTimeout(async () => {
+      const scanner = new Html5Qrcode("reader");
+      scannerRef.current = scanner;
 
-      scanner.render(
-        async (decodedText) => {
-          setBarcode(decodedText);
-          await lookupBarcode(decodedText);
-          await scanner.clear();
-          setShowScanner(false);
-          alert("Barcode Scanned: " + decodedText);
-        },
-        () => {}
-      );
-    }, 100);
+      const scanConfig = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.777778,
+      };
+
+      const onScanSuccess = async (decodedText) => {
+        setBarcode(decodedText);
+        await lookupBarcode(decodedText);
+        await stopScanner();
+        alert("Barcode Scanned: " + decodedText);
+      };
+
+      const onScanFailure = () => {};
+
+      try {
+        await scanner.start(
+          { facingMode: { exact: "environment" } },
+          scanConfig,
+          onScanSuccess,
+          onScanFailure
+        );
+      } catch (environmentError) {
+        console.log(
+          "Exact rear camera request failed. Trying camera list:",
+          environmentError
+        );
+
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+
+          if (!cameras || cameras.length === 0) {
+            throw new Error("No cameras were found.");
+          }
+
+          const rearCamera = findRearCamera(cameras);
+
+          await scanner.start(
+            rearCamera.id,
+            scanConfig,
+            onScanSuccess,
+            onScanFailure
+          );
+        } catch (cameraError) {
+          console.log("Camera start error:", cameraError);
+          alert(
+            "The rear camera could not be opened. Check Safari camera permission and try again."
+          );
+          await stopScanner();
+        }
+      }
+    }, 150);
   }
 
   async function lookupBarcode(code) {
@@ -489,7 +555,7 @@ function App() {
 
           <div id="reader"></div>
 
-          <button onClick={() => setShowScanner(false)}>
+          <button onClick={stopScanner}>
             Close Scanner
           </button>
         </div>
