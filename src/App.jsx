@@ -54,7 +54,7 @@ function App() {
       return;
     }
 
-    const parsedQuantity = Number.parseInt(quantity, 10);
+    const parsedQuantity = Number.parseFloat(quantity);
     const parsedPriority = Number.parseInt(priority, 10);
 
     if (Number.isNaN(parsedQuantity) || parsedQuantity < 0) {
@@ -114,9 +114,8 @@ function App() {
     }
 
     if (existingItem) {
-      const currentQuantity = Number.parseInt(
-        existingItem.quantity || "0",
-        10
+      const currentQuantity = Number.parseFloat(
+        existingItem.quantity || "0"
       );
 
       const newQuantity = currentQuantity + parsedQuantity;
@@ -198,18 +197,13 @@ function App() {
 
     setTimeout(() => {
       const scanner = new Html5QrcodeScanner(
-  "reader",
-  {
-    fps: 10,
-    qrbox: 250,
-    videoConstraints: {
-      facingMode: {
-        ideal: "environment",
-      },
-    },
-  },
-  false
-);
+        "reader",
+        {
+          fps: 10,
+          qrbox: 250,
+        },
+        false
+      );
 
       scanner.render(
         async (decodedText) => {
@@ -422,9 +416,8 @@ function App() {
     }
 
     for (const item of selectedItems) {
-      const purchasedAmount = Number.parseInt(
-        purchasedQuantities[item.id],
-        10
+      const purchasedAmount = Number.parseFloat(
+        purchasedQuantities[item.id]
       );
 
       if (Number.isNaN(purchasedAmount) || purchasedAmount <= 0) {
@@ -438,10 +431,9 @@ function App() {
     try {
       const updateResults = await Promise.all(
         selectedItems.map(async (item) => {
-          const currentQuantity = Number.parseInt(item.quantity || "0", 10);
-          const purchasedAmount = Number.parseInt(
-            purchasedQuantities[item.id],
-            10
+          const currentQuantity = Number.parseFloat(item.quantity || "0");
+          const purchasedAmount = Number.parseFloat(
+            purchasedQuantities[item.id]
           );
           const newQuantity = currentQuantity + purchasedAmount;
 
@@ -518,7 +510,7 @@ function App() {
           <input
             type="number"
             min="0"
-            step="1"
+            step="0.1"
             placeholder="Quantity"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
@@ -647,7 +639,7 @@ function App() {
                       className="purchased-quantity-input"
                       type="number"
                       min="1"
-                      step="1"
+                      step="0.1"
                       value={purchasedValue}
                       onChange={(e) =>
                         updatePurchasedQuantity(item.id, e.target.value)
