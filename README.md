@@ -24,8 +24,16 @@ After making changes:
 
 ```bash
 git add .
-git commit -m "Describe changes"
+git commit -m "scanner fix 2"
 git push
 ```
 
+
+future upgrades:
+    >sort by category, location
+    >shopping feature: have if 0 is detected give list (emoticon?), if low, another symbol
+    >core list 
+    >hide inventory on another link or screen
+    >favorites
+    >generate shopping list by location (assign all items a place they can be bought)
 Vercel will automatically redeploy the app after pushing to GitHub.
