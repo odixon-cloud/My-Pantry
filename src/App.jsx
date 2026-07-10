@@ -198,13 +198,18 @@ function App() {
 
     setTimeout(() => {
       const scanner = new Html5QrcodeScanner(
-        "reader",
-        {
-          fps: 10,
-          qrbox: 250,
-        },
-        false
-      );
+  "reader",
+  {
+    fps: 10,
+    qrbox: 250,
+    videoConstraints: {
+      facingMode: {
+        ideal: "environment",
+      },
+    },
+  },
+  false
+);
 
       scanner.render(
         async (decodedText) => {
