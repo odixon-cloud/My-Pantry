@@ -106,13 +106,32 @@ function App() {
       return;
     }
 
-    const { data: existingItem, error: existingItemError } = await supabase
-      .from("pantry_items")
-      .select("*")
-      .eq("name", itemName.trim())
-      .eq("location", location)
-      .eq("category", category)
-      .maybeSingle();
+    let existingItem = null;
+    let existingItemError = null;
+
+    if (barcode) {
+      const barcodeLookup = await supabase
+        .from("pantry_items")
+        .select("*")
+        .eq("barcode", barcode)
+        .maybeSingle();
+
+      existingItem = barcodeLookup.data;
+      existingItemError = barcodeLookup.error;
+    }
+
+    if (!existingItem && !existingItemError) {
+      const nameLookup = await supabase
+        .from("pantry_items")
+        .select("*")
+        .eq("name", itemName.trim())
+        .eq("location", location)
+        .eq("category", category)
+        .maybeSingle();
+
+      existingItem = nameLookup.data;
+      existingItemError = nameLookup.error;
+    }
 
     if (existingItemError) {
       alert(existingItemError.message);
