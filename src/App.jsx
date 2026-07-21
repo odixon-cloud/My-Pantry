@@ -247,6 +247,40 @@ function App() {
     );
   }
 
+  async function improveCameraFocus(scanner) {
+    try {
+      const capabilities = scanner.getRunningTrackCameraCapabilities();
+      const constraints = {};
+
+      if (
+        capabilities.focusMode &&
+        Array.isArray(capabilities.focusMode) &&
+        capabilities.focusMode.includes("continuous")
+      ) {
+        constraints.focusMode = "continuous";
+      }
+
+      if (capabilities.zoom) {
+        const minimumZoom = Number(capabilities.zoom.min ?? 1);
+        const maximumZoom = Number(capabilities.zoom.max ?? minimumZoom);
+        const preferredZoom = Math.min(
+          maximumZoom,
+          Math.max(minimumZoom, 1.5)
+        );
+
+        constraints.zoom = preferredZoom;
+      }
+
+      if (Object.keys(constraints).length > 0) {
+        await scanner.applyVideoConstraints({
+          advanced: [constraints],
+        });
+      }
+    } catch (error) {
+      console.log("Camera focus controls are not available:", error);
+    }
+  }
+
   function scanBarcode(mode = "add") {
     setScannerMode(mode);
     setShowScanner(true);
@@ -256,12 +290,32 @@ function App() {
       scannerRef.current = scanner;
 
       const scanConfig = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
+        fps: 8,
+        qrbox: { width: 300, height: 180 },
         aspectRatio: 1.777778,
       };
 
+      let candidateBarcode = "";
+      let matchingReadCount = 0;
+      let scannerReady = false;
+
       const onScanSuccess = async (decodedText) => {
+        if (!scannerReady) {
+          return;
+        }
+
+        if (decodedText === candidateBarcode) {
+          matchingReadCount += 1;
+        } else {
+          candidateBarcode = decodedText;
+          matchingReadCount = 1;
+        }
+
+        if (matchingReadCount < 3) {
+          return;
+        }
+
+        scannerReady = false;
         await stopScanner();
 
         if (mode === "use") {
@@ -295,6 +349,11 @@ function App() {
           onScanSuccess,
           onScanFailure
         );
+
+        await improveCameraFocus(scanner);
+        setTimeout(() => {
+          scannerReady = true;
+        }, 1200);
       } catch (environmentError) {
         console.log(
           "Exact rear camera request failed. Trying camera list:",
@@ -316,6 +375,11 @@ function App() {
             onScanSuccess,
             onScanFailure
           );
+
+          await improveCameraFocus(scanner);
+          setTimeout(() => {
+            scannerReady = true;
+          }, 1200);
         } catch (cameraError) {
           console.log("Camera start error:", cameraError);
           alert(
