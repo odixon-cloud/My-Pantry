@@ -327,7 +327,6 @@ function App() {
             setSelectedUseItem(matchingItem);
             setUseSearchTerm(matchingItem.name || "");
             setUseQuantity("1");
-            alert("Item found: " + matchingItem.name);
           } else {
             alert("That barcode is not currently in your pantry.");
           }
@@ -337,7 +336,6 @@ function App() {
 
         setBarcode(decodedText);
         await lookupBarcode(decodedText);
-        alert("Barcode Scanned: " + decodedText);
       };
 
       const onScanFailure = () => {};
