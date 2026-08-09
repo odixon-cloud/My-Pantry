@@ -59,6 +59,7 @@ function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [inventoryLocation, setInventoryLocation] = useState("All");
   const [editingId, setEditingId] = useState(null);
   const [showInventory, setShowInventory] = useState(false);
   const [priority, setPriority] = useState("3");
@@ -699,6 +700,22 @@ function App() {
     return status === STOCK_STATUS.LOW || status === STOCK_STATUS.OUT;
   }).length;
   const activeSectionDetails = SECTION_DETAILS[activeSection];
+  const visibleInventoryItems = filterInventoryItems(items, searchTerm).filter(
+    (item) =>
+      inventoryLocation === "All" || item.location === inventoryLocation
+  );
+  const inventoryGroups = visibleInventoryItems.reduce((groups, item) => {
+    const groupName = item.category || "Other";
+    const existingGroup = groups.find((group) => group.name === groupName);
+
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({ name: groupName, items: [item] });
+    }
+
+    return groups;
+  }, []);
 
   function navigateToSection(section) {
     setActiveSection(section);
@@ -979,26 +996,95 @@ function App() {
 
               {showInventory && (
                 <>
-                  <input className="inventory-search" type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                  <div className="inventory-table-wrap">
-                    <div className="inventory-header">
-                      <span>Item</span><span>Quantity</span><span>Target</span><span>Priority</span><span>Location</span><span>Category</span><span>Action</span>
-                    </div>
-                    {filterInventoryItems(items, searchTerm).map((item) => (
-                      <div key={item.id} className="inventory-item">
-                        <span>{item.name}</span>
-                        <span>{item.quantity}</span>
-                        <span>{item.target_quantity ?? "Not set"}</span>
-                        <span>{getPriorityLabel(item.priority)}</span>
-                        <span>{item.location}</span>
-                        <span>{item.category}</span>
-                        <div>
-                          <button onClick={() => editItem(item)}>Edit</button>
-                          <button onClick={() => deleteItem(item.id)}>Delete</button>
-                        </div>
-                      </div>
+                  <div className="location-filters" aria-label="Filter inventory by location">
+                    {["All", ...LOCATION_OPTIONS].map((locationOption) => (
+                      <button
+                        key={locationOption}
+                        type="button"
+                        className={inventoryLocation === locationOption ? "active" : ""}
+                        aria-pressed={inventoryLocation === locationOption}
+                        onClick={() => setInventoryLocation(locationOption)}
+                      >
+                        {locationOption}
+                      </button>
                     ))}
                   </div>
+
+                  <input className="inventory-search" type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+
+                  <div className="inventory-results-summary">
+                    <span>{visibleInventoryItems.length} {visibleInventoryItems.length === 1 ? "item" : "items"}</span>
+                    <span>{inventoryLocation === "All" ? "All locations" : inventoryLocation}</span>
+                  </div>
+
+                  {inventoryGroups.length === 0 ? (
+                    <div className="inventory-empty-state">
+                      <strong>No matching items</strong>
+                      <span>Try another search or location.</span>
+                    </div>
+                  ) : (
+                    <div className="inventory-groups">
+                      {inventoryGroups.map((group) => (
+                        <section key={group.name} className="inventory-category-group" aria-labelledby={`category-${group.name.replace(/\s+/g, "-").toLowerCase()}`}>
+                          <div className="category-heading">
+                            <h3 id={`category-${group.name.replace(/\s+/g, "-").toLowerCase()}`}>{group.name}</h3>
+                            <span>{group.items.length}</span>
+                          </div>
+
+                          <div className="inventory-card-grid">
+                            {group.items.map((item) => {
+                              const stockStatus = getStockStatus(item);
+                              const hasTargetQuantity =
+                                item.target_quantity !== null &&
+                                item.target_quantity !== undefined &&
+                                item.target_quantity !== "";
+
+                              return (
+                                <article key={item.id} className={`inventory-card stock-${stockStatus.toLowerCase()}`}>
+                                  <div className="product-placeholder">
+                                    <span className={`stock-status-badge stock-${stockStatus.toLowerCase()}`}>{stockStatus}</span>
+                                    <span className="product-placeholder-icon" aria-hidden="true">▦</span>
+                                  </div>
+
+                                  <div className="inventory-card-body">
+                                    <span className="inventory-card-category">{item.category || "Other"}</span>
+                                    <h4>{item.name}</h4>
+
+                                    <div className="card-quantity">
+                                      <strong>{item.quantity}</strong>
+                                      <span>current quantity</span>
+                                    </div>
+
+                                    <dl className="inventory-card-details">
+                                      <div>
+                                        <dt>Location</dt>
+                                        <dd>{item.location}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Priority</dt>
+                                        <dd>{getPriorityLabel(item.priority)}</dd>
+                                      </div>
+                                      {hasTargetQuantity && (
+                                        <div>
+                                          <dt>Target</dt>
+                                          <dd>{item.target_quantity}</dd>
+                                        </div>
+                                      )}
+                                    </dl>
+                                  </div>
+
+                                  <div className="inventory-card-actions">
+                                    <button type="button" onClick={() => editItem(item)}>Edit</button>
+                                    <button type="button" className="delete-button" onClick={() => deleteItem(item.id)}>Delete</button>
+                                  </div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </section>
