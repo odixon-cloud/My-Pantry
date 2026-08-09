@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import "./App.css";
+import {
+  CATEGORY_OPTIONS,
+  LOCATION_OPTIONS,
+  PRIORITY_OPTIONS,
+} from "./constants/inventory";
 import { supabase } from "./supabaseClient";
+import {
+  filterInventoryItems,
+  getPriorityLabel,
+  getSuggestedBuyAmount,
+  normalizeQuantity,
+  selectShoppingListItems,
+} from "./utils/inventory";
 
 function App() {
   const [itemName, setItemName] = useState("");
@@ -60,7 +72,7 @@ function App() {
       return;
     }
 
-    const parsedQuantity = Number.parseFloat(quantity);
+    const parsedQuantity = normalizeQuantity(quantity);
     const parsedPriority = Number.parseInt(priority, 10);
 
     if (Number.isNaN(parsedQuantity) || parsedQuantity < 0) {
@@ -139,7 +151,7 @@ function App() {
     }
 
     if (existingItem) {
-      const currentQuantity = Number.parseFloat(
+      const currentQuantity = normalizeQuantity(
         existingItem.quantity || "0"
       );
 
@@ -483,74 +495,11 @@ function App() {
     setItems(items.filter((item) => item.id !== idToDelete));
   }
 
-  function getPriorityLabel(itemPriority) {
-    const value = Number(itemPriority);
-
-    if (value === 1) return "High";
-    if (value === 2) return "Medium";
-    return "Low";
-  }
-
   function getShoppingListTitle() {
     if (shoppingListType === "quick") return "Quick Shopping List";
     if (shoppingListType === "medium") return "Medium Shopping List";
     if (shoppingListType === "full") return "Full Shopping List";
     return "";
-  }
-
-  function getShoppingListItems() {
-    if (!shoppingListType) {
-      return [];
-    }
-
-    return items
-      .filter((item) => {
-        const currentQuantity = Number(item.quantity);
-        const targetQuantity = Number(item.target_quantity);
-        const itemPriority = Number(item.priority);
-
-        if (
-          item.target_quantity === null ||
-          item.target_quantity === undefined ||
-          item.target_quantity === ""
-        ) {
-          return false;
-        }
-
-        if (
-          Number.isNaN(currentQuantity) ||
-          Number.isNaN(targetQuantity) ||
-          targetQuantity <= currentQuantity
-        ) {
-          return false;
-        }
-
-        if (shoppingListType === "quick") {
-          return itemPriority === 1;
-        }
-
-        if (shoppingListType === "medium") {
-          return itemPriority === 1 || itemPriority === 2;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const priorityDifference = Number(a.priority) - Number(b.priority);
-
-        if (priorityDifference !== 0) {
-          return priorityDifference;
-        }
-
-        return (a.name || "").localeCompare(b.name || "");
-      });
-  }
-
-  function getSuggestedBuyAmount(item) {
-    return Math.max(
-      0,
-      Number(item.target_quantity) - Number(item.quantity)
-    );
   }
 
   function togglePurchasedItem(item) {
@@ -587,7 +536,7 @@ function App() {
     }
 
     for (const item of selectedItems) {
-      const purchasedAmount = Number.parseFloat(
+      const purchasedAmount = normalizeQuantity(
         purchasedQuantities[item.id]
       );
 
@@ -602,8 +551,8 @@ function App() {
     try {
       const updateResults = await Promise.all(
         selectedItems.map(async (item) => {
-          const currentQuantity = Number.parseFloat(item.quantity || "0");
-          const purchasedAmount = Number.parseFloat(
+          const currentQuantity = normalizeQuantity(item.quantity || "0");
+          const purchasedAmount = normalizeQuantity(
             purchasedQuantities[item.id]
           );
           const newQuantity = currentQuantity + purchasedAmount;
@@ -654,8 +603,8 @@ function App() {
       return;
     }
 
-    const amountUsed = Number.parseFloat(useQuantity);
-    const currentQuantity = Number.parseFloat(selectedUseItem.quantity || "0");
+    const amountUsed = normalizeQuantity(useQuantity);
+    const currentQuantity = normalizeQuantity(selectedUseItem.quantity || "0");
 
     if (Number.isNaN(amountUsed) || amountUsed <= 0) {
       alert("Enter an amount greater than 0.");
@@ -705,7 +654,7 @@ function App() {
         .slice(0, 8)
     : [];
 
-  const shoppingListItems = getShoppingListItems();
+  const shoppingListItems = selectShoppingListItems(items, shoppingListType);
 
   return (
     <div className="container">
@@ -825,11 +774,9 @@ function App() {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
           >
-            <option>Pantry</option>
-            <option>Fridge</option>
-            <option>Freezer</option>
-            <option>Office Fridge</option>
-            <option>Counter</option>
+            {LOCATION_OPTIONS.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
         </label>
 
@@ -839,17 +786,9 @@ function App() {
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
-            <option>Baking</option>
-            <option>Beverages</option>
-            <option>Canned Goods</option>
-            <option>Condiments</option>
-            <option>Dairy</option>
-            <option>Frozen</option>
-            <option>Meat</option>
-            <option>Produce</option>
-            <option>Snacks</option>
-            <option>Spices</option>
-            <option>Other</option>
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
         </label>
 
@@ -859,9 +798,11 @@ function App() {
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
           >
-            <option value="1">High Priority</option>
-            <option value="2">Medium Priority</option>
-            <option value="3">Low Priority</option>
+            {PRIORITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -1001,12 +942,7 @@ function App() {
             <span>Action</span>
           </div>
 
-          {items
-            .filter((item) =>
-              (item.name || "")
-                .toLowerCase()
-                .includes(searchTerm.toLowerCase())
-            )
+          {filterInventoryItems(items, searchTerm)
             .map((item) => (
               <div key={item.id} className="inventory-item">
                 <span>{item.name}</span>
