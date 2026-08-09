@@ -193,6 +193,89 @@
   font-size: 14px;
 }
 
+.top-header-copy {
+  min-width: 0;
+}
+
+.header-status-area {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.kitchen-status {
+  min-width: 276px;
+  min-height: 60px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) minmax(112px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 9px 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255, 254, 250, 0.88);
+  box-shadow: var(--shadow-soft);
+}
+
+.kitchen-clock,
+.weather-reading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.kitchen-time {
+  color: var(--color-heading);
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.kitchen-date {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.kitchen-weather {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-left: 13px;
+  border-left: 1px solid var(--color-border);
+}
+
+.weather-icon {
+  flex: 0 0 auto;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.weather-reading strong {
+  color: var(--color-heading);
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.weather-reading span,
+.weather-message {
+  margin-top: 3px;
+  color: var(--color-muted);
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.weather-message {
+  margin: 0;
+  text-align: right;
+}
+
 .eyebrow {
   display: block;
   color: var(--color-primary);
@@ -1605,6 +1688,10 @@ select {
     padding-inline: 28px;
   }
 
+  .kitchen-status {
+    min-width: 250px;
+  }
+
   .add-item-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1682,6 +1769,11 @@ select {
     padding: 20px 24px;
   }
 
+  .kitchen-status {
+    min-width: 238px;
+    grid-template-columns: minmax(104px, 1fr) minmax(100px, auto);
+  }
+
   .main-content {
     padding: 26px 24px 38px;
   }
@@ -1753,7 +1845,11 @@ select {
 
 @media (max-width: 700px) {
   .top-header {
-    align-items: flex-start;
+    min-height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 12px;
   }
 
   .top-header h1 {
@@ -1771,6 +1867,38 @@ select {
 
   .inventory-count-pill span {
     display: none;
+  }
+
+  .header-status-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .kitchen-status {
+    min-width: 0;
+    min-height: 54px;
+    grid-template-columns: minmax(100px, 1fr) auto;
+    gap: 10px;
+    padding: 8px 11px;
+  }
+
+  .inventory-count-pill {
+    align-items: center;
+  }
+
+  .kitchen-time {
+    font-size: 17px;
+  }
+
+  .weather-icon {
+    font-size: 21px;
+  }
+
+  .kitchen-weather {
+    gap: 6px;
+    padding-left: 10px;
   }
 
   .main-content {
@@ -1889,8 +2017,17 @@ select {
 
 @media (max-width: 520px) {
   .top-header {
-    min-height: 92px;
     padding-inline: 18px;
+  }
+
+  .kitchen-status {
+    grid-template-columns: minmax(94px, 1fr) auto;
+  }
+
+  .kitchen-date,
+  .weather-reading span,
+  .weather-message {
+    font-size: 9px;
   }
 
   .add-item-row,

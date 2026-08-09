@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import "./App.css";
 import InventoryItemVisual from "./components/InventoryItemVisual.jsx";
+import KitchenStatus from "./components/KitchenStatus.jsx";
 import NavIcon from "./components/NavIcon.jsx";
 import {
   CATEGORY_OPTIONS,
@@ -976,14 +977,17 @@ function App() {
 
       <div className="content-shell">
         <header className="top-header">
-          <div>
+          <div className="top-header-copy">
             <span className="eyebrow">My Pantry</span>
             <h1>{activeSectionDetails.title}</h1>
             <p>{activeSectionDetails.subtitle}</p>
           </div>
-          <div className="inventory-count-pill">
-            <strong>{items.length}</strong>
-            <span>items tracked</span>
+          <div className="header-status-area">
+            <KitchenStatus />
+            <div className="inventory-count-pill">
+              <strong>{items.length}</strong>
+              <span>items tracked</span>
+            </div>
           </div>
         </header>
 
