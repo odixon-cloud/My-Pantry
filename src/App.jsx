@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import "./App.css";
 import InventoryItemVisual from "./components/InventoryItemVisual.jsx";
+import NavIcon from "./components/NavIcon.jsx";
 import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
@@ -19,12 +20,12 @@ import {
 } from "./utils/inventory.js";
 
 const PRIMARY_NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "D" },
-  { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "I" },
-  { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "S" },
-  { id: "add", label: "Add Item", mobileLabel: "Add", icon: "+" },
-  { id: "use", label: "Use Item", mobileLabel: "Use", icon: "−" },
-  { id: "settings", label: "Item Settings", icon: "⚙" },
+  { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "home" },
+  { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "inventory" },
+  { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "shopping" },
+  { id: "add", label: "Add Item", mobileLabel: "Add", icon: "add" },
+  { id: "use", label: "Use Item", mobileLabel: "Use", icon: "use" },
+  { id: "settings", label: "Item Settings", icon: "settings" },
 ];
 
 const FUTURE_NAV_ITEMS = ["Recipes", "Activity", "Timers", "Music"];
@@ -96,11 +97,29 @@ function App() {
   const [itemSettingsDrafts, setItemSettingsDrafts] = useState({});
   const [savingItemSettings, setSavingItemSettings] = useState({});
   const [itemSettingsFeedback, setItemSettingsFeedback] = useState({});
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  const [deletingSelectedItem, setDeletingSelectedItem] = useState(false);
   const scannerRef = useRef(null);
+  const inventorySearchRef = useRef(null);
 
   useEffect(() => {
     fetchItems();
   }, []);
+
+  useEffect(() => {
+    if (!selectedInventoryItem) {
+      return undefined;
+    }
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") {
+        setSelectedInventoryItem(null);
+      }
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [selectedInventoryItem]);
 
   async function fetchItems() {
     const { data, error } = await supabase
@@ -550,10 +569,39 @@ function App() {
     if (error) {
       console.log(error);
       alert(error.message);
-      return;
+      return false;
     }
 
     setItems(items.filter((item) => item.id !== idToDelete));
+    return true;
+  }
+
+  function editSelectedInventoryItem() {
+    if (!selectedInventoryItem) {
+      return;
+    }
+
+    editItem(selectedInventoryItem);
+    setSelectedInventoryItem(null);
+  }
+
+  async function deleteSelectedInventoryItem() {
+    if (!selectedInventoryItem) {
+      return;
+    }
+
+    setDeletingSelectedItem(true);
+    const wasDeleted = await deleteItem(selectedInventoryItem.id);
+    setDeletingSelectedItem(false);
+
+    if (wasDeleted) {
+      setSelectedInventoryItem(null);
+    }
+  }
+
+  function clearInventorySearch() {
+    setSearchTerm("");
+    inventorySearchRef.current?.focus();
   }
 
   function getItemSettingsDraft(item) {
@@ -837,6 +885,9 @@ function App() {
     return status === STOCK_STATUS.LOW || status === STOCK_STATUS.OUT;
   }).length;
   const activeSectionDetails = SECTION_DETAILS[activeSection];
+  const selectedInventoryStockStatus = selectedInventoryItem
+    ? getStockStatus(selectedInventoryItem)
+    : null;
   const visibleInventoryItems = filterInventoryItems(items, searchTerm).filter(
     (item) =>
       inventoryLocation === "All" || item.location === inventoryLocation
@@ -894,7 +945,7 @@ function App() {
               aria-current={activeSection === item.id ? "page" : undefined}
               onClick={() => navigateToSection(item.id)}
             >
-              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -1275,7 +1326,26 @@ function App() {
                     ))}
                   </div>
 
-                  <input className="inventory-search" type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  <div className="inventory-search-wrap">
+                    <input
+                      ref={inventorySearchRef}
+                      className="inventory-search"
+                      type="text"
+                      placeholder="Search inventory..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        className="inventory-search-clear"
+                        aria-label="Clear inventory search"
+                        onClick={clearInventorySearch}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
 
                   <div className="inventory-results-summary">
                     <span>{visibleInventoryItems.length} {visibleInventoryItems.length === 1 ? "item" : "items"}</span>
@@ -1301,31 +1371,19 @@ function App() {
                               const stockStatus = getStockStatus(item);
 
                               return (
-                                <article key={item.id} className={`inventory-card stock-${stockStatus.toLowerCase()}`}>
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`inventory-card stock-${stockStatus.toLowerCase()}`}
+                                  aria-label={`View details for ${item.name}`}
+                                  onClick={() => setSelectedInventoryItem(item)}
+                                >
                                   <InventoryItemVisual item={item} stockStatus={stockStatus} />
 
                                   <div className="inventory-card-body">
-                                    <span className="inventory-card-category">{item.category || "Other"}</span>
-                                    <h4>{item.name}</h4>
-
-                                    <div className="card-quantity">
-                                      <strong>{item.quantity}</strong>
-                                      <span>current quantity</span>
-                                    </div>
-
-                                    <dl className="inventory-card-details">
-                                      <div>
-                                        <dt>Location</dt>
-                                        <dd>{item.location}</dd>
-                                      </div>
-                                    </dl>
+                                    <h4>{item.name} <span>({item.quantity})</span></h4>
                                   </div>
-
-                                  <div className="inventory-card-actions">
-                                    <button type="button" onClick={() => editItem(item)}>Edit</button>
-                                    <button type="button" className="delete-button" onClick={() => deleteItem(item.id)}>Delete</button>
-                                  </div>
-                                </article>
+                                </button>
                               );
                             })}
                           </div>
@@ -1340,6 +1398,79 @@ function App() {
         </main>
       </div>
 
+      {selectedInventoryItem && (
+        <div className="item-detail-backdrop" onClick={() => setSelectedInventoryItem(null)}>
+          <div
+            className="item-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="item-detail-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="item-detail-close"
+              aria-label="Close item details"
+              onClick={() => setSelectedInventoryItem(null)}
+            >
+              ×
+            </button>
+
+            <InventoryItemVisual
+              item={selectedInventoryItem}
+              stockStatus={selectedInventoryStockStatus}
+            />
+
+            <div className="item-detail-content">
+              <span className="eyebrow">Inventory item</span>
+              <h2 id="item-detail-title">{selectedInventoryItem.name}</h2>
+
+              <dl className="item-detail-grid">
+                <div>
+                  <dt>Current quantity</dt>
+                  <dd>{selectedInventoryItem.quantity}</dd>
+                </div>
+                <div>
+                  <dt>Stock status</dt>
+                  <dd className={`detail-stock-status stock-${selectedInventoryStockStatus.toLowerCase()}`}>
+                    {selectedInventoryStockStatus}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Category</dt>
+                  <dd>{selectedInventoryItem.category || "Other"}</dd>
+                </div>
+                <div>
+                  <dt>Location</dt>
+                  <dd>{selectedInventoryItem.location}</dd>
+                </div>
+                {selectedInventoryItem.barcode && (
+                  <div className="item-detail-barcode">
+                    <dt>Barcode</dt>
+                    <dd>{selectedInventoryItem.barcode}</dd>
+                  </div>
+                )}
+              </dl>
+
+              <div className="item-detail-actions">
+                <button type="button" onClick={editSelectedInventoryItem}>Edit Item</button>
+                <button
+                  type="button"
+                  className="delete-button"
+                  onClick={deleteSelectedInventoryItem}
+                  disabled={deletingSelectedItem}
+                >
+                  {deletingSelectedItem ? "Deleting..." : "Delete Item"}
+                </button>
+                <button type="button" className="secondary-button" onClick={() => setSelectedInventoryItem(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="mobile-nav" aria-label="Mobile navigation">
         {PRIMARY_NAV_ITEMS.filter((item) => item.id !== "settings").map((item) => (
           <button
@@ -1349,7 +1480,7 @@ function App() {
             aria-current={activeSection === item.id ? "page" : undefined}
             onClick={() => navigateToSection(item.id)}
           >
-            <span className="mobile-nav-icon" aria-hidden="true">{item.icon}</span>
+            <span className="mobile-nav-icon"><NavIcon name={item.icon} /></span>
             <span>{item.mobileLabel}</span>
           </button>
         ))}
