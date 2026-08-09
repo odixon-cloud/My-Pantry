@@ -5,6 +5,7 @@ import InventoryItemVisual from "./components/InventoryItemVisual.jsx";
 import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
+  PRIORITY_OPTIONS,
   STOCK_STATUS,
 } from "./constants/inventory.js";
 import { supabase } from "./supabaseClient";
@@ -23,6 +24,7 @@ const PRIMARY_NAV_ITEMS = [
   { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "S" },
   { id: "add", label: "Add Item", mobileLabel: "Add", icon: "+" },
   { id: "use", label: "Use Item", mobileLabel: "Use", icon: "−" },
+  { id: "settings", label: "Item Settings", icon: "⚙" },
 ];
 
 const FUTURE_NAV_ITEMS = ["Recipes", "Activity", "Timers", "Music"];
@@ -48,7 +50,23 @@ const SECTION_DETAILS = {
     title: "Use Item",
     subtitle: "Quickly remove used quantities from inventory.",
   },
+  settings: {
+    title: "Item Settings",
+    subtitle: "Manage restock targets and shopping priority.",
+  },
 };
+
+function createItemSettingsDraft(item) {
+  return {
+    priority: String(item.priority ?? 3),
+    targetQuantity:
+      item.target_quantity === null ||
+      item.target_quantity === undefined ||
+      item.target_quantity === ""
+        ? ""
+        : String(item.target_quantity),
+  };
+}
 
 function App() {
   const [itemName, setItemName] = useState("");
@@ -73,6 +91,11 @@ function App() {
   const [useQuantity, setUseQuantity] = useState("1");
   const [usingItem, setUsingItem] = useState(false);
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [settingsSearchTerm, setSettingsSearchTerm] = useState("");
+  const [settingsLocation, setSettingsLocation] = useState("All");
+  const [itemSettingsDrafts, setItemSettingsDrafts] = useState({});
+  const [savingItemSettings, setSavingItemSettings] = useState({});
+  const [itemSettingsFeedback, setItemSettingsFeedback] = useState({});
   const scannerRef = useRef(null);
 
   useEffect(() => {
@@ -533,6 +556,120 @@ function App() {
     setItems(items.filter((item) => item.id !== idToDelete));
   }
 
+  function getItemSettingsDraft(item) {
+    return itemSettingsDrafts[item.id] || createItemSettingsDraft(item);
+  }
+
+  function updateItemSettingsDraft(item, field, value) {
+    const initialDraft = createItemSettingsDraft(item);
+
+    setItemSettingsDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        ...(current[item.id] || initialDraft),
+        [field]: value,
+      },
+    }));
+    setItemSettingsFeedback((current) => ({
+      ...current,
+      [item.id]: null,
+    }));
+  }
+
+  async function saveItemSettings(item) {
+    const draft = getItemSettingsDraft(item);
+    const parsedPriority = Number(draft.priority);
+    const targetValue = String(draft.targetQuantity ?? "").trim();
+    let parsedTargetQuantity = null;
+
+    if (![1, 2, 3].includes(parsedPriority)) {
+      setItemSettingsFeedback((current) => ({
+        ...current,
+        [item.id]: {
+          type: "error",
+          message: "Choose a valid priority.",
+        },
+      }));
+      return;
+    }
+
+    if (targetValue !== "") {
+      parsedTargetQuantity = Number(targetValue);
+
+      if (
+        !Number.isFinite(parsedTargetQuantity) ||
+        parsedTargetQuantity < 0
+      ) {
+        setItemSettingsFeedback((current) => ({
+          ...current,
+          [item.id]: {
+            type: "error",
+            message: "Target must be blank or 0 or greater.",
+          },
+        }));
+        return;
+      }
+    }
+
+    setSavingItemSettings((current) => ({
+      ...current,
+      [item.id]: true,
+    }));
+    setItemSettingsFeedback((current) => ({
+      ...current,
+      [item.id]: null,
+    }));
+
+    try {
+      const { error } = await supabase
+        .from("pantry_items")
+        .update({
+          priority: parsedPriority,
+          target_quantity: parsedTargetQuantity,
+        })
+        .eq("id", item.id);
+
+      if (error) {
+        setItemSettingsFeedback((current) => ({
+          ...current,
+          [item.id]: {
+            type: "error",
+            message: error.message,
+          },
+        }));
+        return;
+      }
+
+      await fetchItems();
+      setItemSettingsDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[item.id];
+        return nextDrafts;
+      });
+      setItemSettingsFeedback((current) => ({
+        ...current,
+        [item.id]: {
+          type: "success",
+          message: "Saved",
+        },
+      }));
+    } catch (error) {
+      console.log(error);
+      setItemSettingsFeedback((current) => ({
+        ...current,
+        [item.id]: {
+          type: "error",
+          message: "Settings could not be saved.",
+        },
+      }));
+    } finally {
+      setSavingItemSettings((current) => ({
+        ...current,
+        [item.id]: false,
+      }));
+    }
+  }
+
   function getShoppingListTitle() {
     if (shoppingListType === "quick") return "Quick Shopping List";
     if (shoppingListType === "medium") return "Medium Shopping List";
@@ -703,6 +840,13 @@ function App() {
   const visibleInventoryItems = filterInventoryItems(items, searchTerm).filter(
     (item) =>
       inventoryLocation === "All" || item.location === inventoryLocation
+  );
+  const visibleSettingsItems = filterInventoryItems(
+    items,
+    settingsSearchTerm
+  ).filter(
+    (item) =>
+      settingsLocation === "All" || item.location === settingsLocation
   );
   const inventoryGroups = visibleInventoryItems.reduce((groups, item) => {
     const groupName = item.category || "Other";
@@ -974,6 +1118,130 @@ function App() {
             </section>
           )}
 
+          {activeSection === "settings" && (
+            <section className="feature-panel settings-panel" aria-labelledby="settings-heading">
+              <div className="panel-heading">
+                <span className="eyebrow">Restock preferences</span>
+                <h2 id="settings-heading">Item Settings</h2>
+                <p>Set shopping priority and target quantity without changing the item itself.</p>
+              </div>
+
+              <div className="settings-controls">
+                <label className="settings-search">
+                  <span>Search items</span>
+                  <input
+                    type="text"
+                    placeholder="Search by item name..."
+                    value={settingsSearchTerm}
+                    onChange={(e) => setSettingsSearchTerm(e.target.value)}
+                  />
+                </label>
+
+                <div className="location-filters" aria-label="Filter item settings by location">
+                  {["All", ...LOCATION_OPTIONS].map((locationOption) => (
+                    <button
+                      key={locationOption}
+                      type="button"
+                      className={settingsLocation === locationOption ? "active" : ""}
+                      aria-pressed={settingsLocation === locationOption}
+                      onClick={() => setSettingsLocation(locationOption)}
+                    >
+                      {locationOption}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings-results-summary">
+                {visibleSettingsItems.length} {visibleSettingsItems.length === 1 ? "item" : "items"}
+              </div>
+
+              {visibleSettingsItems.length === 0 ? (
+                <div className="inventory-empty-state">
+                  <strong>No matching items</strong>
+                  <span>Try another search or location.</span>
+                </div>
+              ) : (
+                <div className="settings-list">
+                  <div className="settings-list-header" aria-hidden="true">
+                    <span>Item</span>
+                    <span>Current</span>
+                    <span>Location</span>
+                    <span>Category</span>
+                    <span>Priority</span>
+                    <span>Target</span>
+                    <span>Action</span>
+                  </div>
+
+                  {visibleSettingsItems.map((item) => {
+                    const draft = getItemSettingsDraft(item);
+                    const feedback = itemSettingsFeedback[item.id];
+                    const isSaving = Boolean(savingItemSettings[item.id]);
+
+                    return (
+                      <div key={item.id} className="settings-item-row">
+                        <div className="settings-item-name">
+                          <span className="settings-field-label">Item</span>
+                          <strong>{item.name}</strong>
+                        </div>
+
+                        <div className="settings-readonly-cell">
+                          <span className="settings-field-label">Current quantity</span>
+                          <strong>{item.quantity}</strong>
+                        </div>
+
+                        <div className="settings-readonly-cell">
+                          <span className="settings-field-label">Location</span>
+                          <span>{item.location}</span>
+                        </div>
+
+                        <div className="settings-readonly-cell">
+                          <span className="settings-field-label">Category</span>
+                          <span>{item.category || "Other"}</span>
+                        </div>
+
+                        <label className="settings-input-cell">
+                          <span className="settings-field-label">Priority</span>
+                          <select
+                            value={draft.priority}
+                            onChange={(e) => updateItemSettingsDraft(item, "priority", e.target.value)}
+                          >
+                            {PRIORITY_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label.replace(" Priority", "")}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="settings-input-cell">
+                          <span className="settings-field-label">Target quantity</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="Unset"
+                            value={draft.targetQuantity}
+                            onChange={(e) => updateItemSettingsDraft(item, "targetQuantity", e.target.value)}
+                          />
+                        </label>
+
+                        <div className="settings-save-cell">
+                          <button type="button" onClick={() => saveItemSettings(item)} disabled={isSaving}>
+                            {isSaving ? "Saving..." : "Save"}
+                          </button>
+                          {feedback && (
+                            <span className={`settings-feedback ${feedback.type}`} role={feedback.type === "error" ? "alert" : "status"}>
+                              {feedback.message}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {activeSection === "inventory" && (
             <section className="feature-panel" aria-labelledby="inventory-heading">
               <div className="inventory-toolbar">
@@ -981,9 +1249,14 @@ function App() {
                   <span className="eyebrow">Pantry records</span>
                   <h2 id="inventory-heading">Inventory</h2>
                 </div>
-                <button type="button" className="secondary-button" onClick={() => setShowInventory(!showInventory)}>
-                  {showInventory ? "Hide Inventory" : "Show Inventory"}
-                </button>
+                <div className="inventory-toolbar-actions">
+                  <button type="button" className="secondary-button" onClick={() => navigateToSection("settings")}>
+                    Item Settings
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setShowInventory(!showInventory)}>
+                    {showInventory ? "Hide Inventory" : "Show Inventory"}
+                  </button>
+                </div>
               </div>
 
               {showInventory && (
@@ -1068,7 +1341,7 @@ function App() {
       </div>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {PRIMARY_NAV_ITEMS.map((item) => (
+        {PRIMARY_NAV_ITEMS.filter((item) => item.id !== "settings").map((item) => (
           <button
             key={item.id}
             type="button"

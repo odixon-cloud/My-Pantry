@@ -600,6 +600,13 @@ select {
   margin-bottom: 0;
 }
 
+.inventory-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .inventory-search {
   margin-bottom: 12px;
 }
@@ -943,6 +950,140 @@ select {
   color: var(--color-heading);
 }
 
+.settings-controls {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.settings-search {
+  display: grid;
+  gap: 7px;
+  color: var(--color-heading);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.settings-search input {
+  max-width: 540px;
+}
+
+.settings-controls .location-filters {
+  margin-bottom: 0;
+}
+
+.settings-results-summary {
+  margin: 16px 0 12px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-list {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.settings-list-header,
+.settings-item-row {
+  display: grid;
+  grid-template-columns:
+    minmax(145px, 1.5fr) minmax(65px, 0.65fr) minmax(90px, 1fr)
+    minmax(90px, 1fr) minmax(100px, 1fr) minmax(95px, 1fr)
+    minmax(90px, 0.85fr);
+  gap: 10px;
+  align-items: center;
+  padding: 13px 14px;
+}
+
+.settings-list-header {
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-border-strong);
+  background: #f5f6f1;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-item-row {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-item-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-item-name,
+.settings-readonly-cell,
+.settings-save-cell {
+  min-width: 0;
+}
+
+.settings-item-name strong,
+.settings-readonly-cell > span,
+.settings-readonly-cell strong {
+  overflow-wrap: anywhere;
+}
+
+.settings-item-name strong {
+  color: var(--color-heading);
+  font-size: 13px;
+}
+
+.settings-readonly-cell {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.settings-readonly-cell strong {
+  color: var(--color-heading);
+  font-size: 16px;
+}
+
+.settings-input-cell {
+  min-width: 0;
+}
+
+.settings-input-cell select,
+.settings-input-cell input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.settings-field-label {
+  display: none;
+}
+
+.settings-save-cell {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-save-cell button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.settings-feedback {
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.settings-feedback.success {
+  color: #397054;
+}
+
+.settings-feedback.error {
+  color: #a23c34;
+}
+
 .mobile-nav {
   display: none;
 }
@@ -967,6 +1108,56 @@ select {
 
   .inventory-card-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .settings-list {
+    display: grid;
+    gap: 12px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .settings-list-header {
+    display: none;
+  }
+
+  .settings-item-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+    padding: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: #fbfbf7;
+  }
+
+  .settings-item-row:last-child {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .settings-item-name,
+  .settings-save-cell {
+    grid-column: 1 / -1;
+  }
+
+  .settings-field-label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .settings-save-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .settings-save-cell button {
+    min-width: 120px;
   }
 }
 
@@ -1127,6 +1318,29 @@ select {
 
   .inventory-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-toolbar-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settings-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-item-name,
+  .settings-save-cell {
+    grid-column: auto;
+  }
+
+  .settings-save-cell {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-save-cell button {
+    width: 100%;
   }
 
   .use-item-search-row {
