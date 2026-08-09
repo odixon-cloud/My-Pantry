@@ -5,7 +5,6 @@ import InventoryItemVisual from "./components/InventoryItemVisual.jsx";
 import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
-  PRIORITY_OPTIONS,
   STOCK_STATUS,
 } from "./constants/inventory.js";
 import { supabase } from "./supabaseClient";
@@ -918,14 +917,6 @@ function App() {
                     {CATEGORY_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                   </select>
                 </label>
-                <label>
-                  Priority
-                  <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-                    {PRIORITY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
                 <button onClick={() => scanBarcode("add")}>Scan Barcode</button>
                 <button onClick={addItem}>{editingId !== null ? "Update Item" : "Add Item"}</button>
                 {editingId !== null && <button className="secondary-button" onClick={resetForm}>Cancel Edit</button>}
@@ -1035,10 +1026,6 @@ function App() {
                           <div className="inventory-card-grid">
                             {group.items.map((item) => {
                               const stockStatus = getStockStatus(item);
-                              const hasTargetQuantity =
-                                item.target_quantity !== null &&
-                                item.target_quantity !== undefined &&
-                                item.target_quantity !== "";
 
                               return (
                                 <article key={item.id} className={`inventory-card stock-${stockStatus.toLowerCase()}`}>
@@ -1058,16 +1045,6 @@ function App() {
                                         <dt>Location</dt>
                                         <dd>{item.location}</dd>
                                       </div>
-                                      <div>
-                                        <dt>Priority</dt>
-                                        <dd>{getPriorityLabel(item.priority)}</dd>
-                                      </div>
-                                      {hasTargetQuantity && (
-                                        <div>
-                                          <dt>Target</dt>
-                                          <dd>{item.target_quantity}</dd>
-                                        </div>
-                                      )}
                                     </dl>
                                   </div>
 
