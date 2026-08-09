@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import "./App.css";
+import InventoryItemVisual from "./components/InventoryItemVisual.jsx";
 import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
@@ -1041,10 +1042,7 @@ function App() {
 
                               return (
                                 <article key={item.id} className={`inventory-card stock-${stockStatus.toLowerCase()}`}>
-                                  <div className="product-placeholder">
-                                    <span className={`stock-status-badge stock-${stockStatus.toLowerCase()}`}>{stockStatus}</span>
-                                    <span className="product-placeholder-icon" aria-hidden="true">▦</span>
-                                  </div>
+                                  <InventoryItemVisual item={item} stockStatus={stockStatus} />
 
                                   <div className="inventory-card-body">
                                     <span className="inventory-card-category">{item.category || "Other"}</span>

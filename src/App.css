@@ -707,6 +707,8 @@ select {
 }
 
 .product-placeholder {
+  --visual-surface: #edf0e9;
+  --visual-decoration: rgba(83, 127, 105, 0.07);
   position: relative;
   min-height: 122px;
   display: grid;
@@ -715,7 +717,7 @@ select {
   border-bottom: 1px solid var(--color-border);
   background:
     radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.9), transparent 42%),
-    #edf0e9;
+    var(--visual-surface);
 }
 
 .product-placeholder::after {
@@ -726,13 +728,74 @@ select {
   width: 95px;
   height: 95px;
   border-radius: 50%;
-  background: rgba(83, 127, 105, 0.07);
+  background: var(--visual-decoration);
 }
 
-.product-placeholder-icon {
-  color: #8fa097;
+.product-visual {
+  position: relative;
+  z-index: 1;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 8px 20px rgba(55, 77, 66, 0.08);
   font-size: 38px;
   line-height: 1;
+}
+
+.product-placeholder.visual-produce {
+  --visual-surface: #e8f2df;
+  --visual-decoration: rgba(91, 142, 77, 0.1);
+}
+
+.product-placeholder.visual-protein {
+  --visual-surface: #f5e8e1;
+  --visual-decoration: rgba(159, 91, 70, 0.09);
+}
+
+.product-placeholder.visual-dairy {
+  --visual-surface: #e8f0f1;
+  --visual-decoration: rgba(83, 133, 143, 0.09);
+}
+
+.product-placeholder.visual-pantry,
+.product-placeholder.visual-baking {
+  --visual-surface: #f2eadc;
+  --visual-decoration: rgba(151, 112, 63, 0.09);
+}
+
+.product-placeholder.visual-beverage {
+  --visual-surface: #e4f0ec;
+  --visual-decoration: rgba(61, 128, 105, 0.09);
+}
+
+.product-placeholder.visual-frozen {
+  --visual-surface: #e7eef5;
+  --visual-decoration: rgba(78, 117, 153, 0.09);
+}
+
+.product-placeholder.visual-canned,
+.product-placeholder.visual-condiment {
+  --visual-surface: #f1ece3;
+  --visual-decoration: rgba(124, 104, 73, 0.08);
+}
+
+.product-placeholder.visual-snack {
+  --visual-surface: #f6ead8;
+  --visual-decoration: rgba(177, 117, 41, 0.09);
+}
+
+.product-placeholder.visual-spice {
+  --visual-surface: #e9efe2;
+  --visual-decoration: rgba(83, 121, 67, 0.09);
+}
+
+.product-placeholder.visual-generic {
+  --visual-surface: #ecefeb;
+  --visual-decoration: rgba(98, 112, 104, 0.07);
 }
 
 .stock-status-badge {
