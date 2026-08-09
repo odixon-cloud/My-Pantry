@@ -5,15 +5,50 @@ import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
   PRIORITY_OPTIONS,
+  STOCK_STATUS,
 } from "./constants/inventory.js";
 import { supabase } from "./supabaseClient";
 import {
   filterInventoryItems,
   getPriorityLabel,
+  getStockStatus,
   getSuggestedBuyAmount,
   normalizeQuantity,
   selectShoppingListItems,
 } from "./utils/inventory.js";
+
+const PRIMARY_NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "D" },
+  { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "I" },
+  { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "S" },
+  { id: "add", label: "Add Item", mobileLabel: "Add", icon: "+" },
+  { id: "use", label: "Use Item", mobileLabel: "Use", icon: "−" },
+];
+
+const FUTURE_NAV_ITEMS = ["Recipes", "Activity", "Timers", "Music"];
+
+const SECTION_DETAILS = {
+  dashboard: {
+    title: "Kitchen Dashboard",
+    subtitle: "A clear view of what is in your kitchen.",
+  },
+  inventory: {
+    title: "Inventory",
+    subtitle: "Search, review, and manage your pantry items.",
+  },
+  shopping: {
+    title: "Shopping List",
+    subtitle: "Build a list from the quantities you already track.",
+  },
+  add: {
+    title: "Add Item",
+    subtitle: "Add a new item or update an existing one.",
+  },
+  use: {
+    title: "Use Item",
+    subtitle: "Quickly remove used quantities from inventory.",
+  },
+};
 
 function App() {
   const [itemName, setItemName] = useState("");
@@ -36,6 +71,7 @@ function App() {
   const [selectedUseItem, setSelectedUseItem] = useState(null);
   const [useQuantity, setUseQuantity] = useState("1");
   const [usingItem, setUsingItem] = useState(false);
+  const [activeSection, setActiveSection] = useState("dashboard");
   const scannerRef = useRef(null);
 
   useEffect(() => {
@@ -473,6 +509,7 @@ function App() {
     setCategory(item.category || "Other");
     setBarcode(item.barcode || "");
     setPriority(String(item.priority ?? 3));
+    setActiveSection("add");
 
     window.scrollTo({
       top: 0,
@@ -655,316 +692,334 @@ function App() {
     : [];
 
   const shoppingListItems = selectShoppingListItems(items, shoppingListType);
+  const dashboardShoppingItems = selectShoppingListItems(items, "full");
+  const lowOrOutOfStockCount = items.filter((item) => {
+    const status = getStockStatus(item);
+
+    return status === STOCK_STATUS.LOW || status === STOCK_STATUS.OUT;
+  }).length;
+  const activeSectionDetails = SECTION_DETAILS[activeSection];
+
+  function navigateToSection(section) {
+    setActiveSection(section);
+
+    if (section === "inventory") {
+      setShowInventory(true);
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
 
   return (
-    <div className="container">
-      <h1>My Pantry</h1>
-
-      <h2>{editingId !== null ? "Edit Item" : "Add Item"}</h2>
-
-      <p>Barcode: {barcode || "None"}</p>
-
-      {showScanner && (
-        <div
-          style={{
-            background: "black",
-            color: "white",
-            padding: "20px",
-            marginBottom: "20px",
-            textAlign: "center",
-          }}
-        >
-          <h3>{scannerMode === "use" ? "Scan Item to Use" : "Scanner Window"}</h3>
-
-          <div id="reader"></div>
-
-          <button onClick={stopScanner}>
-            Close Scanner
-          </button>
-        </div>
-      )}
-
-      <div className="use-item-section">
-        <h2>Use Item</h2>
-
-        <div className="use-item-search-row">
-          <input
-            type="text"
-            placeholder="Search for an item..."
-            value={useSearchTerm}
-            onChange={(e) => {
-              setUseSearchTerm(e.target.value);
-              setSelectedUseItem(null);
-            }}
-          />
-
-          <button onClick={() => scanBarcode("use")}>
-            Scan Item to Use
-          </button>
-        </div>
-
-        {!selectedUseItem && matchingUseItems.length > 0 && (
-          <div className="use-search-results">
-            {matchingUseItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => selectItemToUse(item)}
-              >
-                {item.name} — Current: {item.quantity}
-              </button>
-            ))}
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">MP</span>
+          <div>
+            <strong>My Pantry</strong>
+            <span>Kitchen companion</span>
           </div>
-        )}
+        </div>
 
-        {selectedUseItem && (
-          <div className="selected-use-item">
-            <div>
-              <strong>{selectedUseItem.name}</strong>
-              <span>Current quantity: {selectedUseItem.quantity}</span>
+        <nav className="sidebar-nav" aria-label="Primary navigation">
+          {PRIMARY_NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={activeSection === item.id ? "nav-item active" : "nav-item"}
+              aria-current={activeSection === item.id ? "page" : undefined}
+              onClick={() => navigateToSection(item.id)}
+            >
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="future-nav" aria-label="Coming later">
+          <span className="future-nav-label">Coming Later</span>
+          {FUTURE_NAV_ITEMS.map((item) => (
+            <button key={item} type="button" className="nav-item future" disabled>
+              <span className="nav-icon" aria-hidden="true">·</span>
+              <span>{item}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="sidebar-footer">
+          <span className="status-dot" aria-hidden="true"></span>
+          Pantry ready
+        </div>
+      </aside>
+
+      <div className="content-shell">
+        <header className="top-header">
+          <div>
+            <span className="eyebrow">My Pantry</span>
+            <h1>{activeSectionDetails.title}</h1>
+            <p>{activeSectionDetails.subtitle}</p>
+          </div>
+          <div className="inventory-count-pill">
+            <strong>{items.length}</strong>
+            <span>items tracked</span>
+          </div>
+        </header>
+
+        <main className="main-content">
+          {showScanner && (
+            <div className="scanner-panel">
+              <h2>{scannerMode === "use" ? "Scan Item to Use" : "Scanner Window"}</h2>
+              <div id="reader"></div>
+              <button onClick={stopScanner}>Close Scanner</button>
             </div>
+          )}
 
-            <label>
-              Amount Used
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={useQuantity}
-                onChange={(e) => setUseQuantity(e.target.value)}
-              />
-            </label>
-
-            <button onClick={useSelectedItem} disabled={usingItem}>
-              {usingItem ? "Updating..." : "Remove from Inventory"}
-            </button>
-
-            <button type="button" onClick={clearUseItem}>
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="add-item-row">
-        <label>
-          Item Name
-          <input
-            placeholder="Item name"
-            value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
-          />
-        </label>
-
-        <label>
-          Quantity
-          <input
-            type="number"
-            min="0"
-            step="0.1"
-            placeholder="Quantity"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-          />
-        </label>
-
-        <label>
-          Location
-          <select
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          >
-            {LOCATION_OPTIONS.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Category
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {CATEGORY_OPTIONS.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Priority
-          <select
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-          >
-            {PRIORITY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button onClick={() => scanBarcode("add")}>
-          Scan Barcode
-        </button>
-
-        <button onClick={addItem}>
-          {editingId !== null ? "Update Item" : "Add Item"}
-        </button>
-
-        {editingId !== null && (
-          <button onClick={resetForm}>
-            Cancel Edit
-          </button>
-        )}
-      </div>
-
-      <div className="shopping-list-controls">
-        <h2>Generate Shopping List</h2>
-
-        <button onClick={() => setShoppingListType("quick")}>
-          Quick List
-        </button>
-
-        <button onClick={() => setShoppingListType("medium")}>
-          Medium List
-        </button>
-
-        <button onClick={() => setShoppingListType("full")}>
-          Full List
-        </button>
-
-        {shoppingListType && (
-          <button onClick={() => setShoppingListType("")}>
-            Hide List
-          </button>
-        )}
-      </div>
-
-      {shoppingListType && (
-        <div className="shopping-list">
-          <h2>{getShoppingListTitle()}</h2>
-
-          {shoppingListItems.length === 0 ? (
-            <p>No items are currently needed for this list.</p>
-          ) : (
-            <>
-              <div className="shopping-list-header">
-                <span>Bought</span>
-                <span>Item</span>
-                <span>Suggested</span>
-                <span>Purchased</span>
-                <span>Category</span>
-                <span>Priority</span>
+          {activeSection === "dashboard" && (
+            <section className="dashboard-view" aria-labelledby="dashboard-heading">
+              <div className="dashboard-welcome">
+                <div>
+                  <span className="eyebrow">At a glance</span>
+                  <h2 id="dashboard-heading">Your kitchen, organized.</h2>
+                  <p>Check stock levels, plan a shopping trip, or update an item in a few taps.</p>
+                </div>
+                <button type="button" onClick={() => navigateToSection("add")}>
+                  Add an item
+                </button>
               </div>
 
-              {shoppingListItems.map((item) => {
-                const suggestedBuyAmount = getSuggestedBuyAmount(item);
-                const purchasedValue =
-                  purchasedQuantities[item.id] ?? suggestedBuyAmount;
-
-                return (
-                  <div key={item.id} className="shopping-list-item">
-                    <input
-                      className="shopping-checkbox"
-                      type="checkbox"
-                      checked={Boolean(selectedPurchasedItems[item.id])}
-                      onChange={() => togglePurchasedItem(item)}
-                      aria-label={`Mark ${item.name} as purchased`}
-                    />
-
-                    <span>{item.name}</span>
-                    <span>Buy: {suggestedBuyAmount}</span>
-
-                    <input
-                      className="purchased-quantity-input"
-                      type="number"
-                      min="1"
-                      step="0.1"
-                      value={purchasedValue}
-                      onChange={(e) =>
-                        updatePurchasedQuantity(item.id, e.target.value)
-                      }
-                    />
-
-                    <span>{item.category}</span>
-                    <span>{getPriorityLabel(item.priority)}</span>
-                  </div>
-                );
-              })}
-
-              <button
-                className="add-purchased-button"
-                onClick={addPurchasedItemsToPantry}
-                disabled={savingPurchasedItems}
-              >
-                {savingPurchasedItems
-                  ? "Adding Items..."
-                  : "Add Purchased Items to Pantry"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      <button
-        onClick={() => setShowInventory(!showInventory)}
-        style={{ marginTop: "30px" }}
-      >
-        {showInventory ? "Hide Inventory" : "Show Inventory"}
-      </button>
-
-      {showInventory && (
-        <>
-          <h2>Inventory</h2>
-
-          <input
-            type="text"
-            placeholder="Search inventory..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              marginBottom: "10px",
-              width: "100%",
-              padding: "8px",
-            }}
-          />
-
-          <div className="inventory-header">
-            <span>Item</span>
-            <span>Quantity</span>
-            <span>Target</span>
-            <span>Priority</span>
-            <span>Location</span>
-            <span>Category</span>
-            <span>Action</span>
-          </div>
-
-          {filterInventoryItems(items, searchTerm)
-            .map((item) => (
-              <div key={item.id} className="inventory-item">
-                <span>{item.name}</span>
-                <span>{item.quantity}</span>
-                <span>{item.target_quantity ?? "Not set"}</span>
-                <span>{getPriorityLabel(item.priority)}</span>
-                <span>{item.location}</span>
-                <span>{item.category}</span>
-
-                <div>
-                  <button onClick={() => editItem(item)}>
-                    Edit
-                  </button>
-
-                  <button onClick={() => deleteItem(item.id)}>
-                    Delete
-                  </button>
+              <div className="summary-grid">
+                <div className="summary-panel">
+                  <span>Total inventory</span>
+                  <strong>{items.length}</strong>
+                  <small>Unique items tracked</small>
+                </div>
+                <div className="summary-panel attention">
+                  <span>Needs attention</span>
+                  <strong>{lowOrOutOfStockCount}</strong>
+                  <small>Low or out of stock</small>
+                </div>
+                <div className="summary-panel shopping">
+                  <span>Shopping list</span>
+                  <strong>{dashboardShoppingItems.length}</strong>
+                  <small>Items below target</small>
                 </div>
               </div>
-            ))}
-        </>
-      )}
+
+              <div className="quick-actions-panel">
+                <div>
+                  <span className="eyebrow">Quick access</span>
+                  <h2>What would you like to do?</h2>
+                </div>
+                <div className="quick-actions">
+                  <button type="button" onClick={() => navigateToSection("inventory")}>View Inventory</button>
+                  <button type="button" onClick={() => navigateToSection("add")}>Add Item</button>
+                  <button type="button" onClick={() => navigateToSection("shopping")}>Shopping List</button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "use" && (
+            <section className="feature-panel use-item-section" aria-labelledby="use-item-heading">
+              <div className="panel-heading">
+                <span className="eyebrow">Inventory update</span>
+                <h2 id="use-item-heading">Use Item</h2>
+              </div>
+
+              <div className="use-item-search-row">
+                <input
+                  type="text"
+                  placeholder="Search for an item..."
+                  value={useSearchTerm}
+                  onChange={(e) => {
+                    setUseSearchTerm(e.target.value);
+                    setSelectedUseItem(null);
+                  }}
+                />
+                <button onClick={() => scanBarcode("use")}>Scan Item to Use</button>
+              </div>
+
+              {!selectedUseItem && matchingUseItems.length > 0 && (
+                <div className="use-search-results">
+                  {matchingUseItems.map((item) => (
+                    <button key={item.id} type="button" onClick={() => selectItemToUse(item)}>
+                      {item.name} — Current: {item.quantity}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedUseItem && (
+                <div className="selected-use-item">
+                  <div>
+                    <strong>{selectedUseItem.name}</strong>
+                    <span>Current quantity: {selectedUseItem.quantity}</span>
+                  </div>
+                  <label>
+                    Amount Used
+                    <input type="number" min="0.1" step="0.1" value={useQuantity} onChange={(e) => setUseQuantity(e.target.value)} />
+                  </label>
+                  <button onClick={useSelectedItem} disabled={usingItem}>
+                    {usingItem ? "Updating..." : "Remove from Inventory"}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={clearUseItem}>Cancel</button>
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeSection === "add" && (
+            <section className="feature-panel" aria-labelledby="add-item-heading">
+              <div className="panel-heading">
+                <span className="eyebrow">Pantry details</span>
+                <h2 id="add-item-heading">{editingId !== null ? "Edit Item" : "Add Item"}</h2>
+                <p className="barcode-value">Barcode: {barcode || "None"}</p>
+              </div>
+
+              <div className="add-item-row">
+                <label>
+                  Item Name
+                  <input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+                </label>
+                <label>
+                  Quantity
+                  <input type="number" min="0" step="0.1" placeholder="Quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                </label>
+                <label>
+                  Location
+                  <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                    {LOCATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Category
+                  <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {CATEGORY_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Priority
+                  <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <button onClick={() => scanBarcode("add")}>Scan Barcode</button>
+                <button onClick={addItem}>{editingId !== null ? "Update Item" : "Add Item"}</button>
+                {editingId !== null && <button className="secondary-button" onClick={resetForm}>Cancel Edit</button>}
+              </div>
+            </section>
+          )}
+
+          {activeSection === "shopping" && (
+            <section className="feature-panel" aria-labelledby="shopping-heading">
+              <div className="shopping-list-controls">
+                <div className="panel-heading">
+                  <span className="eyebrow">Restock planning</span>
+                  <h2 id="shopping-heading">Generate Shopping List</h2>
+                </div>
+                <div className="shopping-list-buttons">
+                  <button onClick={() => setShoppingListType("quick")}>Quick List</button>
+                  <button onClick={() => setShoppingListType("medium")}>Medium List</button>
+                  <button onClick={() => setShoppingListType("full")}>Full List</button>
+                  {shoppingListType && <button className="secondary-button" onClick={() => setShoppingListType("")}>Hide List</button>}
+                </div>
+              </div>
+
+              {shoppingListType && (
+                <div className="shopping-list">
+                  <h2>{getShoppingListTitle()}</h2>
+                  {shoppingListItems.length === 0 ? (
+                    <p>No items are currently needed for this list.</p>
+                  ) : (
+                    <>
+                      <div className="shopping-list-header">
+                        <span>Bought</span><span>Item</span><span>Suggested</span><span>Purchased</span><span>Category</span><span>Priority</span>
+                      </div>
+                      {shoppingListItems.map((item) => {
+                        const suggestedBuyAmount = getSuggestedBuyAmount(item);
+                        const purchasedValue = purchasedQuantities[item.id] ?? suggestedBuyAmount;
+
+                        return (
+                          <div key={item.id} className="shopping-list-item">
+                            <input className="shopping-checkbox" type="checkbox" checked={Boolean(selectedPurchasedItems[item.id])} onChange={() => togglePurchasedItem(item)} aria-label={`Mark ${item.name} as purchased`} />
+                            <span>{item.name}</span>
+                            <span>Buy: {suggestedBuyAmount}</span>
+                            <input className="purchased-quantity-input" type="number" min="1" step="0.1" value={purchasedValue} onChange={(e) => updatePurchasedQuantity(item.id, e.target.value)} />
+                            <span>{item.category}</span>
+                            <span>{getPriorityLabel(item.priority)}</span>
+                          </div>
+                        );
+                      })}
+                      <button className="add-purchased-button" onClick={addPurchasedItemsToPantry} disabled={savingPurchasedItems}>
+                        {savingPurchasedItems ? "Adding Items..." : "Add Purchased Items to Pantry"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeSection === "inventory" && (
+            <section className="feature-panel" aria-labelledby="inventory-heading">
+              <div className="inventory-toolbar">
+                <div className="panel-heading">
+                  <span className="eyebrow">Pantry records</span>
+                  <h2 id="inventory-heading">Inventory</h2>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => setShowInventory(!showInventory)}>
+                  {showInventory ? "Hide Inventory" : "Show Inventory"}
+                </button>
+              </div>
+
+              {showInventory && (
+                <>
+                  <input className="inventory-search" type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  <div className="inventory-table-wrap">
+                    <div className="inventory-header">
+                      <span>Item</span><span>Quantity</span><span>Target</span><span>Priority</span><span>Location</span><span>Category</span><span>Action</span>
+                    </div>
+                    {filterInventoryItems(items, searchTerm).map((item) => (
+                      <div key={item.id} className="inventory-item">
+                        <span>{item.name}</span>
+                        <span>{item.quantity}</span>
+                        <span>{item.target_quantity ?? "Not set"}</span>
+                        <span>{getPriorityLabel(item.priority)}</span>
+                        <span>{item.location}</span>
+                        <span>{item.category}</span>
+                        <div>
+                          <button onClick={() => editItem(item)}>Edit</button>
+                          <button onClick={() => deleteItem(item.id)}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+        </main>
+      </div>
+
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {PRIMARY_NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={activeSection === item.id ? "active" : ""}
+            aria-current={activeSection === item.id ? "page" : undefined}
+            onClick={() => navigateToSection(item.id)}
+          >
+            <span className="mobile-nav-icon" aria-hidden="true">{item.icon}</span>
+            <span>{item.mobileLabel}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
