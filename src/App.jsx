@@ -12,7 +12,6 @@ import {
 import { supabase } from "./supabaseClient";
 import {
   filterInventoryItems,
-  getPriorityLabel,
   getStockStatus,
   getSuggestedBuyAmount,
   normalizeQuantity,
@@ -879,6 +878,14 @@ function App() {
 
   const shoppingListItems = selectShoppingListItems(items, shoppingListType);
   const dashboardShoppingItems = selectShoppingListItems(items, "full");
+  const dashboardAttentionItems = items
+    .filter((item) => {
+      const status = getStockStatus(item);
+
+      return status === STOCK_STATUS.LOW || status === STOCK_STATUS.OUT;
+    })
+    .slice(0, 6);
+  const dashboardShoppingPreviewItems = dashboardShoppingItems.slice(0, 6);
   const lowOrOutOfStockCount = items.filter((item) => {
     const status = getStockStatus(item);
 
@@ -1004,20 +1011,99 @@ function App() {
 
               <div className="summary-grid">
                 <div className="summary-panel">
-                  <span>Total inventory</span>
-                  <strong>{items.length}</strong>
-                  <small>Unique items tracked</small>
+                  <span className="summary-icon"><NavIcon name="inventory" /></span>
+                  <div className="summary-copy">
+                    <span>Total inventory</span>
+                    <strong>{items.length}</strong>
+                    <small>Unique items tracked</small>
+                  </div>
                 </div>
                 <div className="summary-panel attention">
-                  <span>Needs attention</span>
-                  <strong>{lowOrOutOfStockCount}</strong>
-                  <small>Low or out of stock</small>
+                  <span className="summary-icon"><NavIcon name="use" /></span>
+                  <div className="summary-copy">
+                    <span>Needs attention</span>
+                    <strong>{lowOrOutOfStockCount}</strong>
+                    <small>Low or out of stock</small>
+                  </div>
                 </div>
                 <div className="summary-panel shopping">
-                  <span>Shopping list</span>
-                  <strong>{dashboardShoppingItems.length}</strong>
-                  <small>Items below target</small>
+                  <span className="summary-icon"><NavIcon name="shopping" /></span>
+                  <div className="summary-copy">
+                    <span>Shopping list</span>
+                    <strong>{dashboardShoppingItems.length}</strong>
+                    <small>Items below target</small>
+                  </div>
                 </div>
+              </div>
+
+              <div className="dashboard-preview-grid">
+                <section className="dashboard-preview-panel" aria-labelledby="attention-preview-heading">
+                  <div className="dashboard-section-heading">
+                    <div>
+                      <span className="eyebrow">Stock check</span>
+                      <h2 id="attention-preview-heading">Low &amp; out of stock</h2>
+                    </div>
+                    <button type="button" className="secondary-button dashboard-view-link" onClick={() => navigateToSection("inventory")}>View Inventory</button>
+                  </div>
+
+                  {dashboardAttentionItems.length === 0 ? (
+                    <div className="dashboard-preview-empty">
+                      <span className="empty-state-icon"><NavIcon name="inventory" /></span>
+                      <p>Everything with a target quantity is well stocked.</p>
+                    </div>
+                  ) : (
+                    <div className="dashboard-preview-list">
+                      {dashboardAttentionItems.map((item) => {
+                        const stockStatus = getStockStatus(item);
+                        const hasTargetQuantity =
+                          item.target_quantity !== null &&
+                          item.target_quantity !== undefined &&
+                          item.target_quantity !== "";
+
+                        return (
+                          <div className="dashboard-attention-item" key={item.id}>
+                            <InventoryItemVisual item={item} stockStatus={stockStatus} compact showBadge={false} />
+                            <div className="dashboard-preview-copy">
+                              <strong>{item.name}</strong>
+                              <span>
+                                Current: {item.quantity}
+                                {hasTargetQuantity ? ` · Target: ${item.target_quantity}` : ""}
+                              </span>
+                            </div>
+                            <span className={`dashboard-status-badge stock-${stockStatus.toLowerCase()}`}>{stockStatus}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <section className="dashboard-preview-panel" aria-labelledby="shopping-preview-heading">
+                  <div className="dashboard-section-heading">
+                    <div>
+                      <span className="eyebrow">Next shop</span>
+                      <h2 id="shopping-preview-heading">Shopping list preview</h2>
+                    </div>
+                    <button type="button" className="secondary-button dashboard-view-link" onClick={() => navigateToSection("shopping")}>Open List</button>
+                  </div>
+
+                  {dashboardShoppingPreviewItems.length === 0 ? (
+                    <div className="dashboard-preview-empty">
+                      <span className="empty-state-icon"><NavIcon name="shopping" /></span>
+                      <p>Your full shopping list is clear.</p>
+                    </div>
+                  ) : (
+                    <div className="dashboard-preview-list">
+                      {dashboardShoppingPreviewItems.map((item) => (
+                        <div className="dashboard-shopping-item" key={item.id}>
+                          <span className="dashboard-shopping-icon"><NavIcon name="shopping" /></span>
+                          <strong>{item.name}</strong>
+                          <span className="dashboard-needed-quantity">Need {getSuggestedBuyAmount(item)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
 
               <div className="quick-actions-panel">
@@ -1026,9 +1112,10 @@ function App() {
                   <h2>What would you like to do?</h2>
                 </div>
                 <div className="quick-actions">
-                  <button type="button" onClick={() => navigateToSection("inventory")}>View Inventory</button>
-                  <button type="button" onClick={() => navigateToSection("add")}>Add Item</button>
-                  <button type="button" onClick={() => navigateToSection("shopping")}>Shopping List</button>
+                  <button type="button" className="quick-action-button" onClick={() => navigateToSection("inventory")}><span><NavIcon name="inventory" /></span>View Inventory</button>
+                  <button type="button" className="quick-action-button" onClick={() => navigateToSection("add")}><span><NavIcon name="add" /></span>Add Item</button>
+                  <button type="button" className="quick-action-button" onClick={() => navigateToSection("use")}><span><NavIcon name="use" /></span>Use Item</button>
+                  <button type="button" className="quick-action-button" onClick={() => navigateToSection("shopping")}><span><NavIcon name="shopping" /></span>Shopping List</button>
                 </div>
               </div>
             </section>
@@ -1127,38 +1214,66 @@ function App() {
                   <h2 id="shopping-heading">Generate Shopping List</h2>
                 </div>
                 <div className="shopping-list-buttons">
-                  <button onClick={() => setShoppingListType("quick")}>Quick List</button>
-                  <button onClick={() => setShoppingListType("medium")}>Medium List</button>
-                  <button onClick={() => setShoppingListType("full")}>Full List</button>
-                  {shoppingListType && <button className="secondary-button" onClick={() => setShoppingListType("")}>Hide List</button>}
+                  <button className={`shopping-list-choice${shoppingListType === "quick" ? " active" : ""}`} aria-pressed={shoppingListType === "quick"} onClick={() => setShoppingListType("quick")}><strong>Quick</strong><span>High priority</span></button>
+                  <button className={`shopping-list-choice${shoppingListType === "medium" ? " active" : ""}`} aria-pressed={shoppingListType === "medium"} onClick={() => setShoppingListType("medium")}><strong>Medium</strong><span>High + medium</span></button>
+                  <button className={`shopping-list-choice${shoppingListType === "full" ? " active" : ""}`} aria-pressed={shoppingListType === "full"} onClick={() => setShoppingListType("full")}><strong>Full</strong><span>Everything needed</span></button>
+                  {shoppingListType && <button className="secondary-button hide-list-button" onClick={() => setShoppingListType("")}>Hide List</button>}
                 </div>
               </div>
 
-              {shoppingListType && (
+              {!shoppingListType ? (
+                <div className="shopping-list-prompt">
+                  <span className="empty-state-icon"><NavIcon name="shopping" /></span>
+                  <div>
+                    <strong>Choose a list to get started</strong>
+                    <p>Your existing priority and target settings determine what appears.</p>
+                  </div>
+                </div>
+              ) : (
                 <div className="shopping-list">
-                  <h2>{getShoppingListTitle()}</h2>
+                  <div className="shopping-list-title-row">
+                    <div>
+                      <span className="eyebrow">Selected list</span>
+                      <h2>{getShoppingListTitle()}</h2>
+                    </div>
+                    <span className="shopping-list-count">{shoppingListItems.length} {shoppingListItems.length === 1 ? "item" : "items"}</span>
+                  </div>
                   {shoppingListItems.length === 0 ? (
-                    <p>No items are currently needed for this list.</p>
+                    <div className="shopping-empty-state">
+                      <span className="empty-state-icon"><NavIcon name="shopping" /></span>
+                      <strong>Nothing to buy right now</strong>
+                      <p>No items are currently needed for this list.</p>
+                    </div>
                   ) : (
                     <>
-                      <div className="shopping-list-header">
-                        <span>Bought</span><span>Item</span><span>Suggested</span><span>Purchased</span><span>Category</span><span>Priority</span>
-                      </div>
-                      {shoppingListItems.map((item) => {
-                        const suggestedBuyAmount = getSuggestedBuyAmount(item);
-                        const purchasedValue = purchasedQuantities[item.id] ?? suggestedBuyAmount;
+                      <div className="shopping-items-list">
+                        {shoppingListItems.map((item) => {
+                          const suggestedBuyAmount = getSuggestedBuyAmount(item);
+                          const purchasedValue = purchasedQuantities[item.id] ?? suggestedBuyAmount;
+                          const isPurchased = Boolean(selectedPurchasedItems[item.id]);
 
-                        return (
-                          <div key={item.id} className="shopping-list-item">
-                            <input className="shopping-checkbox" type="checkbox" checked={Boolean(selectedPurchasedItems[item.id])} onChange={() => togglePurchasedItem(item)} aria-label={`Mark ${item.name} as purchased`} />
-                            <span>{item.name}</span>
-                            <span>Buy: {suggestedBuyAmount}</span>
-                            <input className="purchased-quantity-input" type="number" min="1" step="0.1" value={purchasedValue} onChange={(e) => updatePurchasedQuantity(item.id, e.target.value)} />
-                            <span>{item.category}</span>
-                            <span>{getPriorityLabel(item.priority)}</span>
-                          </div>
-                        );
-                      })}
+                          return (
+                            <div key={item.id} className={`shopping-list-item${isPurchased ? " purchased" : ""}`}>
+                              <label className="shopping-purchase-toggle">
+                                <input className="shopping-checkbox" type="checkbox" checked={isPurchased} onChange={() => togglePurchasedItem(item)} aria-label={`Mark ${item.name} as purchased`} />
+                                <span>Bought</span>
+                              </label>
+                              <div className="shopping-item-main">
+                                <strong>{item.name}</strong>
+                                <span>{item.category || "Other"}</span>
+                              </div>
+                              <div className="shopping-needed">
+                                <span>Need</span>
+                                <strong>{suggestedBuyAmount}</strong>
+                              </div>
+                              <label className="purchased-quantity-control">
+                                <span>Purchased quantity</span>
+                                <input className="purchased-quantity-input" type="number" min="1" step="0.1" value={purchasedValue} onChange={(e) => updatePurchasedQuantity(item.id, e.target.value)} />
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <button className="add-purchased-button" onClick={addPurchasedItemsToPantry} disabled={savingPurchasedItems}>
                         {savingPurchasedItems ? "Adding Items..." : "Add Purchased Items to Pantry"}
                       </button>

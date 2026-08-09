@@ -1,12 +1,20 @@
 import { getInventoryItemVisual } from "../utils/itemVisuals.js";
 
-function InventoryItemVisual({ item, stockStatus }) {
+function InventoryItemVisual({
+  item,
+  stockStatus,
+  compact = false,
+  showBadge = true,
+}) {
   const visual = getInventoryItemVisual(item);
   const stockStatusClass = `stock-${stockStatus.toLowerCase()}`;
-  const showStockBadge = stockStatus === "LOW" || stockStatus === "OUT";
+  const showStockBadge =
+    showBadge && (stockStatus === "LOW" || stockStatus === "OUT");
 
   return (
-    <div className={`product-placeholder visual-${visual.tone}`}>
+    <div
+      className={`product-placeholder visual-${visual.tone}${compact ? " compact" : ""}`}
+    >
       {showStockBadge && (
         <span className={`stock-status-badge ${stockStatusClass}`}>
           {stockStatus}
