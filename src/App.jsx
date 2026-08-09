@@ -5,7 +5,7 @@ import {
   CATEGORY_OPTIONS,
   LOCATION_OPTIONS,
   PRIORITY_OPTIONS,
-} from "./constants/inventory";
+} from "./constants/inventory.js";
 import { supabase } from "./supabaseClient";
 import {
   filterInventoryItems,
@@ -13,7 +13,7 @@ import {
   getSuggestedBuyAmount,
   normalizeQuantity,
   selectShoppingListItems,
-} from "./utils/inventory";
+} from "./utils/inventory.js";
 
 function App() {
   const [itemName, setItemName] = useState("");

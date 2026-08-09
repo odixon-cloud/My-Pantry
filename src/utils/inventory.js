@@ -1,4 +1,4 @@
-import { PRIORITY_LABELS, STOCK_STATUS } from "../constants/inventory";
+import { PRIORITY_LABELS, STOCK_STATUS } from "../constants/inventory.js";
 
 export function normalizeNumericValue(value) {
   return Number(value);
