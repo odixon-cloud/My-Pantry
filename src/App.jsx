@@ -93,7 +93,6 @@ function App() {
   const [purchasedQuantities, setPurchasedQuantities] = useState({});
   const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
   const [scannerMode, setScannerMode] = useState("add");
-  const [stockLocation, setStockLocation] = useState("");
   const [stockScannerBarcode, setStockScannerBarcode] = useState("");
   const [stockBatch, setStockBatch] = useState([]);
   const [stockLookupsInProgress, setStockLookupsInProgress] = useState(0);
@@ -134,7 +133,7 @@ function App() {
   }, [activeSection, showScanner]);
 
   useEffect(() => {
-    if (activeSection !== "stock" || !stockLocation || savingStockBatch) {
+    if (activeSection !== "stock" || savingStockBatch) {
       return undefined;
     }
 
@@ -143,7 +142,7 @@ function App() {
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [activeSection, stockLocation, savingStockBatch]);
+  }, [activeSection, savingStockBatch]);
 
   useEffect(() => {
     if (!selectedInventoryItem) {
@@ -326,25 +325,32 @@ function App() {
     savedCategory,
     savedLocation,
     savedPriority,
+    savedTargetQuantity,
   }) {
+    const memoryRecord = {
+      barcode: code,
+      product_name: productName,
+      category: savedCategory,
+      location: savedLocation,
+      priority: savedPriority,
+    };
+
+    if (savedTargetQuantity !== undefined) {
+      memoryRecord.target_quantity = savedTargetQuantity;
+    }
+
     const { error } = await supabase
       .from("barcode_lookup")
       .upsert(
-        [
-          {
-            barcode: code,
-            product_name: productName,
-            category: savedCategory,
-            location: savedLocation,
-            priority: savedPriority,
-          },
-        ],
+        [memoryRecord],
         { onConflict: "barcode" }
       );
 
     if (error) {
       console.log("Barcode memory error:", error);
     }
+
+    return { error };
   }
 
   async function stopScanner() {
@@ -527,6 +533,9 @@ function App() {
       fallbackCategory = category,
       fallbackLocation = location,
       fallbackPriority = Number.parseInt(priority, 10),
+      fallbackTargetQuantity = "",
+      rememberNewProduct = true,
+      allowUnknownProduct = false,
     } = {}
   ) {
     try {
@@ -546,6 +555,12 @@ function App() {
           category: cachedItem.category || fallbackCategory,
           location: cachedItem.location || fallbackLocation,
           priority: cachedItem.priority ?? fallbackPriority,
+          targetQuantity:
+            cachedItem.target_quantity === null ||
+            cachedItem.target_quantity === undefined
+              ? fallbackTargetQuantity
+              : cachedItem.target_quantity,
+          isRemembered: true,
         };
       }
 
@@ -562,19 +577,32 @@ function App() {
       ) {
         const productName = data.product.product_name;
 
-        await saveBarcodeMemory({
-          code,
-          productName,
-          savedCategory: fallbackCategory,
-          savedLocation: fallbackLocation,
-          savedPriority: fallbackPriority,
-        });
+        if (rememberNewProduct) {
+          await saveBarcodeMemory({
+            code,
+            productName,
+            savedCategory: fallbackCategory,
+            savedLocation: fallbackLocation,
+            savedPriority: fallbackPriority,
+          });
+        }
 
         return {
           productName,
           category: fallbackCategory,
           location: fallbackLocation,
           priority: fallbackPriority,
+          targetQuantity: fallbackTargetQuantity,
+          isRemembered: false,
+        };
+      } else if (allowUnknownProduct) {
+        return {
+          productName: "",
+          category: fallbackCategory,
+          location: fallbackLocation,
+          priority: fallbackPriority,
+          targetQuantity: fallbackTargetQuantity,
+          isRemembered: false,
         };
       } else {
         alert("Product not found");
@@ -631,15 +659,6 @@ function App() {
     }
   }
 
-  function beginStockMode(selectedLocation) {
-    stockSessionRef.current += 1;
-    stockPendingLookupsRef.current = 0;
-    setStockLookupsInProgress(0);
-    setStockScannerBarcode("");
-    setStockBatch([]);
-    setStockLocation(selectedLocation);
-  }
-
   async function submitStockBarcode(event) {
     event.preventDefault();
 
@@ -658,7 +677,6 @@ function App() {
       return;
     }
 
-    const scanLocation = stockLocation;
     const sessionId = stockSessionRef.current;
 
     stockPendingLookupsRef.current += 1;
@@ -667,15 +685,14 @@ function App() {
     try {
       const product = await getBarcodeProduct(completedBarcode, {
         fallbackCategory: "Other",
-        fallbackLocation: scanLocation,
+        fallbackLocation: "Pantry",
         fallbackPriority: 3,
+        fallbackTargetQuantity: "",
+        rememberNewProduct: false,
+        allowUnknownProduct: true,
       });
 
-      if (
-        !product ||
-        !product.productName.trim() ||
-        stockSessionRef.current !== sessionId
-      ) {
+      if (!product || stockSessionRef.current !== sessionId) {
         return;
       }
 
@@ -699,8 +716,14 @@ function App() {
             name: product.productName.trim(),
             quantity: 1,
             category: product.category || "Other",
-            location: scanLocation,
-            priority: product.priority ?? 3,
+            location: product.location || "Pantry",
+            priority: String(product.priority ?? 3),
+            targetQuantity:
+              product.targetQuantity === null ||
+              product.targetQuantity === undefined
+                ? ""
+                : String(product.targetQuantity),
+            isRemembered: product.isRemembered,
           },
         ];
       });
@@ -716,6 +739,16 @@ function App() {
     }
   }
 
+  function updateStockBatchItem(barcodeToUpdate, field, value) {
+    setStockBatch((currentBatch) =>
+      currentBatch.map((item) =>
+        item.barcode === barcodeToUpdate
+          ? { ...item, [field]: value }
+          : item
+      )
+    );
+  }
+
   async function addStockBatch() {
     if (stockPendingLookupsRef.current > 0) {
       alert("Wait for the current barcode lookup to finish.");
@@ -729,11 +762,69 @@ function App() {
       return;
     }
 
+    const preparedBatch = [];
+
+    for (const batchItem of stockBatch) {
+      const normalizedName = batchItem.name.trim();
+      const parsedPriority = Number.parseInt(batchItem.priority, 10);
+      const targetValue = String(batchItem.targetQuantity ?? "").trim();
+      let parsedTargetQuantity = null;
+
+      if (!normalizedName) {
+        alert(`Enter a product name for barcode ${batchItem.barcode}.`);
+        return;
+      }
+
+      if (!LOCATION_OPTIONS.includes(batchItem.location)) {
+        alert(`Choose a valid location for ${normalizedName}.`);
+        return;
+      }
+
+      if (!CATEGORY_OPTIONS.includes(batchItem.category)) {
+        alert(`Choose a valid category for ${normalizedName}.`);
+        return;
+      }
+
+      if (![1, 2, 3].includes(parsedPriority)) {
+        alert(`Choose a valid priority for ${normalizedName}.`);
+        return;
+      }
+
+      if (targetValue !== "") {
+        parsedTargetQuantity = Number(targetValue);
+
+        if (!Number.isFinite(parsedTargetQuantity) || parsedTargetQuantity < 0) {
+          alert(`Target quantity must be blank or 0 or greater for ${normalizedName}.`);
+          return;
+        }
+      }
+
+      preparedBatch.push({
+        ...batchItem,
+        name: normalizedName,
+        priority: parsedPriority,
+        targetQuantity: parsedTargetQuantity,
+      });
+    }
+
     setSavingStockBatch(true);
-    let remainingBatch = [...stockBatch];
+    let remainingBatch = [...preparedBatch];
 
     try {
-      for (const batchItem of stockBatch) {
+      for (const batchItem of preparedBatch) {
+        const memoryResult = await saveBarcodeMemory({
+          code: batchItem.barcode,
+          productName: batchItem.name,
+          savedCategory: batchItem.category,
+          savedLocation: batchItem.location,
+          savedPriority: batchItem.priority,
+          savedTargetQuantity: batchItem.targetQuantity,
+        });
+
+        if (memoryResult.error) {
+          throw memoryResult.error;
+        }
+
         const { data: existingItem, error: lookupError } = await supabase
           .from("pantry_items")
           .select("*")
@@ -754,7 +845,11 @@ function App() {
 
           saveResult = await supabase
             .from("pantry_items")
-            .update({ quantity: newQuantity.toString() })
+            .update({
+              quantity: newQuantity.toString(),
+              priority: batchItem.priority,
+              target_quantity: batchItem.targetQuantity,
+            })
             .eq("id", existingItem.id);
         } else {
           saveResult = await supabase.from("pantry_items").insert([
@@ -765,6 +860,7 @@ function App() {
               barcode: batchItem.barcode,
               category: batchItem.category,
               priority: batchItem.priority,
+              target_quantity: batchItem.targetQuantity,
             },
           ]);
         }
@@ -798,7 +894,6 @@ function App() {
     setStockLookupsInProgress(0);
     setStockScannerBarcode("");
     setStockBatch([]);
-    setStockLocation("");
     setActiveSection("dashboard");
   }
 
@@ -1185,7 +1280,6 @@ function App() {
       setStockLookupsInProgress(0);
       setStockScannerBarcode("");
       setStockBatch([]);
-      setStockLocation("");
     }
 
     setActiveSection(section);
@@ -1394,129 +1488,154 @@ function App() {
 
           {activeSection === "stock" && (
             <section className="feature-panel stock-mode-section" aria-labelledby="stock-heading">
-              {!stockLocation ? (
-                <div className="stock-location-step">
-                  <div className="panel-heading">
-                    <span className="eyebrow">Start a batch</span>
-                    <h2 id="stock-heading">Where are you stocking?</h2>
-                    <p>Every item in this batch will use the selected location.</p>
+              <div className="stock-mode-heading">
+                <div className="panel-heading">
+                  <span className="eyebrow">Stock Mode</span>
+                  <h2 id="stock-heading">Scan a stock batch</h2>
+                  <p>Remembered details fill automatically. Review each item before choosing Add All.</p>
+                </div>
+                <span className="stock-batch-count">
+                  {stockBatch.reduce((total, item) => total + item.quantity, 0)} items
+                </span>
+              </div>
+
+              <form className="stock-scanner-form" onSubmit={submitStockBarcode}>
+                <label htmlFor="stock-scanner-input">
+                  Bluetooth Barcode Scanner
+                  <input
+                    id="stock-scanner-input"
+                    ref={stockScannerInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    placeholder="Scan a barcode"
+                    value={stockScannerBarcode}
+                    disabled={savingStockBatch}
+                    onChange={(event) => setStockScannerBarcode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        submitStockBarcode(event);
+                      }
+                    }}
+                  />
+                </label>
+                <span aria-live="polite">
+                  {stockLookupsInProgress > 0
+                    ? `Looking up ${stockLookupsInProgress} ${stockLookupsInProgress === 1 ? "barcode" : "barcodes"}...`
+                    : "Ready to scan"}
+                </span>
+              </form>
+
+              <div className="stock-batch" aria-live="polite" aria-busy={stockLookupsInProgress > 0}>
+                <div className="stock-batch-title-row">
+                  <h3>Current batch</h3>
+                  <span>{stockBatch.length} unique</span>
+                </div>
+
+                {stockBatch.length === 0 ? (
+                  <div className="stock-batch-empty">
+                    <span className="empty-state-icon"><NavIcon name="stock" /></span>
+                    <strong>Ready for your first scan</strong>
+                    <p>Each new barcode starts with a quantity of 1.</p>
                   </div>
-                  <div className="stock-location-options" role="group" aria-label="Stock location">
-                    {LOCATION_OPTIONS.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className="stock-location-button"
-                        onClick={() => beginStockMode(option)}
-                      >
-                        <span className="stock-location-icon"><NavIcon name="stock" /></span>
-                        {option}
-                      </button>
+                ) : (
+                  <div className="stock-batch-list">
+                    {stockBatch.map((batchItem) => (
+                      <article className="stock-batch-item" key={batchItem.barcode}>
+                        <div className="stock-batch-product">
+                          <label>
+                            Product name
+                            <input
+                              value={batchItem.name}
+                              placeholder="Enter product name"
+                              onChange={(event) =>
+                                updateStockBatchItem(batchItem.barcode, "name", event.target.value)
+                              }
+                            />
+                          </label>
+                          <span>{batchItem.barcode}</span>
+                          <small>{batchItem.isRemembered ? "Remembered details" : "New barcode — review details"}</small>
+                        </div>
+                        <div className="stock-batch-quantity">
+                          <span>Batch quantity</span>
+                          <strong>{batchItem.quantity}</strong>
+                        </div>
+                        <label>
+                          Location
+                          <select
+                            value={batchItem.location}
+                            onChange={(event) =>
+                              updateStockBatchItem(batchItem.barcode, "location", event.target.value)
+                            }
+                          >
+                            {LOCATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          Category
+                          <select
+                            value={batchItem.category}
+                            onChange={(event) =>
+                              updateStockBatchItem(batchItem.barcode, "category", event.target.value)
+                            }
+                          >
+                            {CATEGORY_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          Priority
+                          <select
+                            value={batchItem.priority}
+                            onChange={(event) =>
+                              updateStockBatchItem(batchItem.barcode, "priority", event.target.value)
+                            }
+                          >
+                            {PRIORITY_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Target quantity
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="Optional"
+                            value={batchItem.targetQuantity}
+                            onChange={(event) =>
+                              updateStockBatchItem(batchItem.barcode, "targetQuantity", event.target.value)
+                            }
+                          />
+                        </label>
+                      </article>
                     ))}
                   </div>
-                  <button type="button" className="secondary-button" onClick={cancelStockMode}>
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="stock-mode-heading">
-                    <div className="panel-heading">
-                      <span className="eyebrow">Stock Mode</span>
-                      <h2 id="stock-heading">Stocking {stockLocation}</h2>
-                      <p>Scan each product. Nothing is added to inventory until you choose Add All.</p>
-                    </div>
-                    <span className="stock-batch-count">
-                      {stockBatch.reduce((total, item) => total + item.quantity, 0)} items
-                    </span>
-                  </div>
+                )}
+              </div>
 
-                  <form className="stock-scanner-form" onSubmit={submitStockBarcode}>
-                    <label htmlFor="stock-scanner-input">
-                      Bluetooth Barcode Scanner
-                      <input
-                        id="stock-scanner-input"
-                        ref={stockScannerInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        enterKeyHint="done"
-                        placeholder="Scan a barcode"
-                        value={stockScannerBarcode}
-                        disabled={savingStockBatch}
-                        onChange={(event) => setStockScannerBarcode(event.target.value)}
-                      />
-                    </label>
-                    <span aria-live="polite">
-                      {stockLookupsInProgress > 0
-                        ? `Looking up ${stockLookupsInProgress} ${stockLookupsInProgress === 1 ? "barcode" : "barcodes"}...`
-                        : "Ready to scan"}
-                    </span>
-                  </form>
-
-                  <div className="stock-batch" aria-live="polite" aria-busy={stockLookupsInProgress > 0}>
-                    <div className="stock-batch-title-row">
-                      <h3>Current batch</h3>
-                      <span>{stockBatch.length} unique</span>
-                    </div>
-
-                    {stockBatch.length === 0 ? (
-                      <div className="stock-batch-empty">
-                        <span className="empty-state-icon"><NavIcon name="stock" /></span>
-                        <strong>Ready for your first scan</strong>
-                        <p>Each new barcode starts with a quantity of 1.</p>
-                      </div>
-                    ) : (
-                      <div className="stock-batch-list">
-                        {stockBatch.map((batchItem) => (
-                          <article className="stock-batch-item" key={batchItem.barcode}>
-                            <div className="stock-batch-product">
-                              <strong>{batchItem.name}</strong>
-                              <span>{batchItem.barcode}</span>
-                            </div>
-                            <dl>
-                              <div>
-                                <dt>Quantity</dt>
-                                <dd>{batchItem.quantity}</dd>
-                              </div>
-                              <div>
-                                <dt>Category</dt>
-                                <dd>{batchItem.category}</dd>
-                              </div>
-                              <div>
-                                <dt>Location</dt>
-                                <dd>{batchItem.location}</dd>
-                              </div>
-                            </dl>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="stock-mode-actions">
-                    <button
-                      type="button"
-                      onClick={addStockBatch}
-                      disabled={
-                        savingStockBatch ||
-                        stockLookupsInProgress > 0 ||
-                        stockBatch.length === 0
-                      }
-                    >
-                      {savingStockBatch ? "Adding..." : "Add All"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={cancelStockMode}
-                      disabled={savingStockBatch}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              )}
+              <div className="stock-mode-actions">
+                <button
+                  type="button"
+                  onClick={addStockBatch}
+                  disabled={
+                    savingStockBatch ||
+                    stockLookupsInProgress > 0 ||
+                    stockBatch.length === 0
+                  }
+                >
+                  {savingStockBatch ? "Adding..." : "Add All"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={cancelStockMode}
+                  disabled={savingStockBatch}
+                >
+                  Cancel
+                </button>
+              </div>
             </section>
           )}
 
@@ -1590,6 +1709,11 @@ function App() {
                     placeholder="Scan a barcode or enter its number"
                     value={scannerBarcode}
                     onChange={(event) => setScannerBarcode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        submitScannerBarcode(event);
+                      }
+                    }}
                   />
                 </label>
                 <p>Scans are looked up when the scanner sends Enter. Products are not added automatically.</p>
