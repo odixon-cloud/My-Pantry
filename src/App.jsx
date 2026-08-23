@@ -1728,6 +1728,38 @@ function App() {
                   <button type="button" className="quick-action-button" onClick={() => navigateToSection("shopping")}><span><NavIcon name="shopping" /></span>Shopping List</button>
                 </div>
               </div>
+
+              <section className="dashboard-mode-actions" aria-label="Pantry modes">
+                <button
+                  type="button"
+                  className="dashboard-mode-card stock-card"
+                  onClick={() => navigateToSection("stock")}
+                >
+                  <span className="dashboard-mode-icon" aria-hidden="true">
+                    <NavIcon name="stock" />
+                  </span>
+                  <span className="dashboard-mode-copy">
+                    <strong>Stock</strong>
+                    <small>Add groceries</small>
+                  </span>
+                  <span className="dashboard-mode-arrow" aria-hidden="true">→</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dashboard-mode-card use-card"
+                  onClick={() => navigateToSection("use")}
+                >
+                  <span className="dashboard-mode-icon" aria-hidden="true">
+                    <NavIcon name="use" />
+                  </span>
+                  <span className="dashboard-mode-copy">
+                    <strong>Use</strong>
+                    <small>Use pantry items</small>
+                  </span>
+                  <span className="dashboard-mode-arrow" aria-hidden="true">→</span>
+                </button>
+              </section>
             </section>
           )}
 
