@@ -989,6 +989,199 @@ select {
   margin: 0;
 }
 
+.use-mode-heading,
+.use-batch-title-row,
+.use-mode-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.use-mode-heading .panel-heading {
+  margin-bottom: 0;
+}
+
+.use-batch-count {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: #7b3d27;
+  background: #f7e5d7;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.use-scanner-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid #e2cbb8;
+  border-radius: 16px;
+  background: #fbf2e9;
+}
+
+.use-scanner-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--color-heading);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.use-scanner-form input {
+  background: white;
+}
+
+.use-scanner-form > span {
+  min-width: 118px;
+  padding-bottom: 14px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.use-batch {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.use-batch-title-row {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--color-border);
+  background: #fbfaf5;
+}
+
+.use-batch-title-row h3,
+.single-use-tools h3 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 16px;
+}
+
+.use-batch-title-row span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.use-batch-empty {
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.use-batch-empty strong {
+  margin-top: 10px;
+  color: var(--color-heading);
+}
+
+.use-batch-empty p {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+.use-batch-list {
+  display: grid;
+}
+
+.use-batch-item {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(420px, 2fr);
+  align-items: center;
+  gap: 20px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.use-batch-item:last-child {
+  border-bottom: 0;
+}
+
+.use-batch-item.not-in-inventory {
+  background: #fff3ee;
+}
+
+.use-batch-product {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.use-batch-product strong {
+  overflow: hidden;
+  color: var(--color-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.use-batch-product span,
+.use-batch-product small {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.use-batch-product small {
+  color: #a04432;
+  font-weight: 800;
+}
+
+.use-batch-item dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.use-batch-item dt {
+  margin-bottom: 3px;
+  color: var(--color-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.use-batch-item dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.use-mode-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.use-mode-actions button {
+  min-width: 128px;
+}
+
+.single-use-tools {
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--color-border);
+}
+
+.single-use-tools .panel-heading {
+  margin-bottom: 16px;
+}
+
 .use-item-search-row {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -2133,26 +2326,32 @@ select {
     width: 100%;
   }
 
-  .stock-mode-heading {
+  .stock-mode-heading,
+  .use-mode-heading {
     align-items: flex-start;
   }
 
   .stock-scanner-form,
-  .stock-batch-item {
+  .stock-batch-item,
+  .use-scanner-form,
+  .use-batch-item {
     grid-template-columns: 1fr;
   }
 
-  .stock-scanner-form > span {
+  .stock-scanner-form > span,
+  .use-scanner-form > span {
     min-width: 0;
     padding-bottom: 0;
     text-align: left;
   }
 
-  .stock-batch-item {
+  .stock-batch-item,
+  .use-batch-item {
     gap: 12px;
   }
 
-  .stock-mode-actions button {
+  .stock-mode-actions button,
+  .use-mode-actions button {
     min-width: 0;
     flex: 1;
   }

@@ -25,7 +25,7 @@ const PRIMARY_NAV_ITEMS = [
   { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "shopping" },
   { id: "stock", label: "Stock", mobileLabel: "Stock", icon: "stock" },
   { id: "add", label: "Add Item", mobileLabel: "Add", icon: "add" },
-  { id: "use", label: "Use Item", mobileLabel: "Use", icon: "use" },
+  { id: "use", label: "Use", mobileLabel: "Use", icon: "use" },
   { id: "settings", label: "Item Settings", icon: "settings" },
 ];
 
@@ -53,8 +53,8 @@ const SECTION_DETAILS = {
     subtitle: "Add a new item or update an existing one.",
   },
   use: {
-    title: "Use Item",
-    subtitle: "Quickly remove used quantities from inventory.",
+    title: "Use Mode",
+    subtitle: "Scan a batch of used items before updating inventory.",
   },
   settings: {
     title: "Item Settings",
@@ -97,6 +97,10 @@ function App() {
   const [stockBatch, setStockBatch] = useState([]);
   const [stockLookupsInProgress, setStockLookupsInProgress] = useState(0);
   const [savingStockBatch, setSavingStockBatch] = useState(false);
+  const [useScannerBarcode, setUseScannerBarcode] = useState("");
+  const [useBatch, setUseBatch] = useState([]);
+  const [useLookupsInProgress, setUseLookupsInProgress] = useState(0);
+  const [savingUseBatch, setSavingUseBatch] = useState(false);
   const [useSearchTerm, setUseSearchTerm] = useState("");
   const [selectedUseItem, setSelectedUseItem] = useState(null);
   const [useQuantity, setUseQuantity] = useState("1");
@@ -114,6 +118,9 @@ function App() {
   const stockScannerInputRef = useRef(null);
   const stockSessionRef = useRef(0);
   const stockPendingLookupsRef = useRef(0);
+  const useScannerInputRef = useRef(null);
+  const useSessionRef = useRef(0);
+  const usePendingLookupsRef = useRef(0);
   const inventorySearchRef = useRef(null);
 
   useEffect(() => {
@@ -143,6 +150,18 @@ function App() {
 
     return () => window.clearTimeout(focusTimer);
   }, [activeSection, savingStockBatch]);
+
+  useEffect(() => {
+    if (activeSection !== "use" || showScanner || savingUseBatch) {
+      return undefined;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      useScannerInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeSection, showScanner, savingUseBatch]);
 
   useEffect(() => {
     if (!selectedInventoryItem) {
@@ -897,6 +916,224 @@ function App() {
     setActiveSection("dashboard");
   }
 
+  async function submitUseBarcode(event) {
+    event.preventDefault();
+
+    const completedBarcode = useScannerBarcode.trim();
+
+    setUseScannerBarcode("");
+    useScannerInputRef.current?.focus();
+
+    if (!completedBarcode) {
+      return;
+    }
+
+    if (!/^\d+$/.test(completedBarcode)) {
+      alert("A barcode can only contain numbers.");
+      useScannerInputRef.current?.focus();
+      return;
+    }
+
+    const existingBatchItem = useBatch.find(
+      (item) => item.barcode === completedBarcode
+    );
+
+    if (existingBatchItem) {
+      setUseBatch((currentBatch) =>
+        currentBatch.map((item) =>
+          item.barcode === completedBarcode
+            ? { ...item, removalQuantity: item.removalQuantity + 1 }
+            : item
+        )
+      );
+      useScannerInputRef.current?.focus();
+      return;
+    }
+
+    const sessionId = useSessionRef.current;
+
+    usePendingLookupsRef.current += 1;
+    setUseLookupsInProgress((current) => current + 1);
+
+    try {
+      const product = await getBarcodeProduct(completedBarcode, {
+        fallbackCategory: "Other",
+        fallbackLocation: "Pantry",
+        fallbackPriority: 3,
+        fallbackTargetQuantity: "",
+        rememberNewProduct: false,
+        allowUnknownProduct: true,
+      });
+
+      if (!product || useSessionRef.current !== sessionId) {
+        return;
+      }
+
+      const barcodeMatch = await supabase
+        .from("pantry_items")
+        .select("*")
+        .eq("barcode", completedBarcode)
+        .maybeSingle();
+
+      if (barcodeMatch.error) {
+        console.log("Use Mode barcode inventory lookup error:", barcodeMatch.error);
+      }
+
+      let matchingItem = barcodeMatch.data;
+
+      if (!matchingItem && product.productName.trim()) {
+        const rememberedMatch = await supabase
+          .from("pantry_items")
+          .select("*")
+          .eq("name", product.productName.trim())
+          .eq("location", product.location || "Pantry")
+          .eq("category", product.category || "Other")
+          .maybeSingle();
+
+        if (rememberedMatch.error) {
+          console.log("Use Mode remembered inventory lookup error:", rememberedMatch.error);
+        } else {
+          matchingItem = rememberedMatch.data;
+        }
+      }
+
+      if (!matchingItem) {
+        matchingItem =
+          items.find(
+            (item) => String(item.barcode || "") === completedBarcode
+          ) ||
+          items.find(
+            (item) =>
+              item.name === product.productName.trim() &&
+              item.location === (product.location || "Pantry") &&
+              item.category === (product.category || "Other")
+          ) ||
+          null;
+      }
+
+      setUseBatch((currentBatch) => {
+        const duplicateItem = currentBatch.find(
+          (item) => item.barcode === completedBarcode
+        );
+
+        if (duplicateItem) {
+          return currentBatch.map((item) =>
+            item.barcode === completedBarcode
+              ? { ...item, removalQuantity: item.removalQuantity + 1 }
+              : item
+          );
+        }
+
+        return [
+          ...currentBatch,
+          {
+            barcode: completedBarcode,
+            inventoryItemId: matchingItem?.id ?? null,
+            name:
+              matchingItem?.name ||
+              product.productName.trim() ||
+              "Unknown barcode",
+            removalQuantity: 1,
+            currentQuantity: matchingItem
+              ? normalizeQuantity(matchingItem.quantity || "0")
+              : 0,
+            location: matchingItem?.location || product.location || "Pantry",
+            category: matchingItem?.category || product.category || "Other",
+            isInInventory: Boolean(matchingItem),
+          },
+        ];
+      });
+    } finally {
+      if (useSessionRef.current === sessionId) {
+        usePendingLookupsRef.current = Math.max(
+          0,
+          usePendingLookupsRef.current - 1
+        );
+        setUseLookupsInProgress((current) => Math.max(0, current - 1));
+        useScannerInputRef.current?.focus();
+      }
+    }
+  }
+
+  async function removeUseBatch() {
+    if (usePendingLookupsRef.current > 0) {
+      alert("Wait for the current barcode lookup to finish.");
+      useScannerInputRef.current?.focus();
+      return;
+    }
+
+    if (useBatch.length === 0) {
+      alert("Scan at least one item first.");
+      useScannerInputRef.current?.focus();
+      return;
+    }
+
+    setSavingUseBatch(true);
+    let remainingBatch = [...useBatch];
+
+    try {
+      for (const batchItem of useBatch) {
+        if (!batchItem.isInInventory || batchItem.inventoryItemId === null) {
+          remainingBatch = remainingBatch.filter(
+            (item) => item.barcode !== batchItem.barcode
+          );
+          continue;
+        }
+
+        const { data: currentItem, error: lookupError } = await supabase
+          .from("pantry_items")
+          .select("*")
+          .eq("id", batchItem.inventoryItemId)
+          .maybeSingle();
+
+        if (lookupError) {
+          throw lookupError;
+        }
+
+        if (currentItem) {
+          const currentQuantity = normalizeQuantity(currentItem.quantity || "0");
+          const newQuantity = Math.max(
+            0,
+            currentQuantity - batchItem.removalQuantity
+          );
+          const { error: updateError } = await supabase
+            .from("pantry_items")
+            .update({ quantity: newQuantity.toString() })
+            .eq("id", currentItem.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        }
+
+        remainingBatch = remainingBatch.filter(
+          (item) => item.barcode !== batchItem.barcode
+        );
+      }
+
+      setUseBatch([]);
+      await fetchItems();
+      alert("Used items were removed from your pantry.");
+    } catch (error) {
+      console.log(error);
+      setUseBatch(remainingBatch);
+      await fetchItems();
+      alert(error.message || "The removal batch could not be completed.");
+    } finally {
+      setSavingUseBatch(false);
+      useScannerInputRef.current?.focus();
+    }
+  }
+
+  function cancelUseMode() {
+    useSessionRef.current += 1;
+    usePendingLookupsRef.current = 0;
+    setUseLookupsInProgress(0);
+    setUseScannerBarcode("");
+    setUseBatch([]);
+    setActiveSection("dashboard");
+  }
+
   function editItem(item) {
     setEditingId(item.id);
     setItemName(item.name || "");
@@ -1282,6 +1519,14 @@ function App() {
       setStockBatch([]);
     }
 
+    if (section === "use" && activeSection !== "use") {
+      useSessionRef.current += 1;
+      usePendingLookupsRef.current = 0;
+      setUseLookupsInProgress(0);
+      setUseScannerBarcode("");
+      setUseBatch([]);
+    }
+
     setActiveSection(section);
 
     if (section === "inventory") {
@@ -1640,51 +1885,164 @@ function App() {
           )}
 
           {activeSection === "use" && (
-            <section className="feature-panel use-item-section" aria-labelledby="use-item-heading">
-              <div className="panel-heading">
-                <span className="eyebrow">Inventory update</span>
-                <h2 id="use-item-heading">Use Item</h2>
-              </div>
-
-              <div className="use-item-search-row">
-                <input
-                  type="text"
-                  placeholder="Search for an item..."
-                  value={useSearchTerm}
-                  onChange={(e) => {
-                    setUseSearchTerm(e.target.value);
-                    setSelectedUseItem(null);
-                  }}
-                />
-                <button onClick={() => scanBarcode("use")}>Scan Item to Use</button>
-              </div>
-
-              {!selectedUseItem && matchingUseItems.length > 0 && (
-                <div className="use-search-results">
-                  {matchingUseItems.map((item) => (
-                    <button key={item.id} type="button" onClick={() => selectItemToUse(item)}>
-                      {item.name} — Current: {item.quantity}
-                    </button>
-                  ))}
+            <section className="feature-panel use-item-section" aria-labelledby="use-mode-heading">
+              <div className="use-mode-heading">
+                <div className="panel-heading">
+                  <span className="eyebrow">Bulk removal</span>
+                  <h2 id="use-mode-heading">Use Mode</h2>
+                  <p>Scan each used item. Inventory changes only when you choose Remove All.</p>
                 </div>
-              )}
+                <span className="use-batch-count">
+                  {useBatch.reduce((total, item) => total + item.removalQuantity, 0)} removals
+                </span>
+              </div>
 
-              {selectedUseItem && (
-                <div className="selected-use-item">
-                  <div>
-                    <strong>{selectedUseItem.name}</strong>
-                    <span>Current quantity: {selectedUseItem.quantity}</span>
+              <form className="use-scanner-form" onSubmit={submitUseBarcode}>
+                <label htmlFor="use-scanner-input">
+                  Bluetooth Barcode Scanner
+                  <input
+                    id="use-scanner-input"
+                    ref={useScannerInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    placeholder="Scan a barcode"
+                    value={useScannerBarcode}
+                    disabled={savingUseBatch}
+                    onChange={(event) => setUseScannerBarcode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        submitUseBarcode(event);
+                      }
+                    }}
+                  />
+                </label>
+                <span aria-live="polite">
+                  {useLookupsInProgress > 0
+                    ? `Looking up ${useLookupsInProgress} ${useLookupsInProgress === 1 ? "barcode" : "barcodes"}...`
+                    : "Ready to scan"}
+                </span>
+              </form>
+
+              <div className="use-batch" aria-live="polite" aria-busy={useLookupsInProgress > 0}>
+                <div className="use-batch-title-row">
+                  <h3>Removal batch</h3>
+                  <span>{useBatch.length} unique</span>
+                </div>
+
+                {useBatch.length === 0 ? (
+                  <div className="use-batch-empty">
+                    <span className="empty-state-icon"><NavIcon name="use" /></span>
+                    <strong>Ready for your first scan</strong>
+                    <p>Each scan defaults to removing 1.</p>
                   </div>
-                  <label>
-                    Amount Used
-                    <input type="number" min="0.1" step="0.1" value={useQuantity} onChange={(e) => setUseQuantity(e.target.value)} />
-                  </label>
-                  <button onClick={useSelectedItem} disabled={usingItem}>
-                    {usingItem ? "Updating..." : "Remove from Inventory"}
-                  </button>
-                  <button type="button" className="secondary-button" onClick={clearUseItem}>Cancel</button>
+                ) : (
+                  <div className="use-batch-list">
+                    {useBatch.map((batchItem) => (
+                      <article
+                        className={`use-batch-item${batchItem.isInInventory ? "" : " not-in-inventory"}`}
+                        key={batchItem.barcode}
+                      >
+                        <div className="use-batch-product">
+                          <strong>{batchItem.name}</strong>
+                          <span>{batchItem.barcode}</span>
+                          {!batchItem.isInInventory && (
+                            <small>Not in inventory — no changes will be made</small>
+                          )}
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Remove</dt>
+                            <dd>{batchItem.removalQuantity}</dd>
+                          </div>
+                          <div>
+                            <dt>Current</dt>
+                            <dd>{batchItem.isInInventory ? batchItem.currentQuantity : "—"}</dd>
+                          </div>
+                          <div>
+                            <dt>Location</dt>
+                            <dd>{batchItem.location}</dd>
+                          </div>
+                          <div>
+                            <dt>Category</dt>
+                            <dd>{batchItem.category}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="use-mode-actions">
+                <button
+                  type="button"
+                  onClick={removeUseBatch}
+                  disabled={
+                    savingUseBatch ||
+                    useLookupsInProgress > 0 ||
+                    useBatch.length === 0
+                  }
+                >
+                  {savingUseBatch ? "Removing..." : "Remove All"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={cancelUseMode}
+                  disabled={savingUseBatch}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="single-use-tools">
+                <div className="panel-heading">
+                  <span className="eyebrow">Single item tools</span>
+                  <h3>Search or use the camera scanner</h3>
                 </div>
-              )}
+
+                <div className="use-item-search-row">
+                  <input
+                    type="text"
+                    placeholder="Search for an item..."
+                    value={useSearchTerm}
+                    onChange={(e) => {
+                      setUseSearchTerm(e.target.value);
+                      setSelectedUseItem(null);
+                    }}
+                  />
+                  <button onClick={() => scanBarcode("use")}>Scan Item to Use</button>
+                </div>
+
+                {!selectedUseItem && matchingUseItems.length > 0 && (
+                  <div className="use-search-results">
+                    {matchingUseItems.map((item) => (
+                      <button key={item.id} type="button" onClick={() => selectItemToUse(item)}>
+                        {item.name} — Current: {item.quantity}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedUseItem && (
+                  <div className="selected-use-item">
+                    <div>
+                      <strong>{selectedUseItem.name}</strong>
+                      <span>Current quantity: {selectedUseItem.quantity}</span>
+                    </div>
+                    <label>
+                      Amount Used
+                      <input type="number" min="0.1" step="0.1" value={useQuantity} onChange={(e) => setUseQuantity(e.target.value)} />
+                    </label>
+                    <button onClick={useSelectedItem} disabled={usingItem}>
+                      {usingItem ? "Updating..." : "Remove from Inventory"}
+                    </button>
+                    <button type="button" className="secondary-button" onClick={clearUseItem}>Cancel</button>
+                  </div>
+                )}
+              </div>
             </section>
           )}
 

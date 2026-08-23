@@ -35,8 +35,8 @@ function NavIcon({ name }) {
     ),
     use: (
       <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M8 12h8" />
+        <path d="M4 11h13a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4Z" />
+        <path d="M17 11h4M7 15v3M14 15v3M6 7c0-1 1-1 1-2M11 7c0-1 1-1 1-2" />
       </>
     ),
     settings: (
