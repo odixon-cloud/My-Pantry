@@ -1279,19 +1279,76 @@ function App() {
     }
   }
 
-  function updatePrepQuantity(barcodeToUpdate, value) {
+  function getPrepItemKey(item) {
+    return item.inventoryItemId !== null && item.inventoryItemId !== undefined
+      ? `inventory:${item.inventoryItemId}`
+      : `barcode:${item.barcode}`;
+  }
+
+  function addInventoryItemToPrep(itemToAdd) {
+    const inventoryBarcode = String(itemToAdd.barcode || "");
+
+    setPrepBoard((currentBoard) => {
+      const existingItem = currentBoard.find(
+        (item) =>
+          item.inventoryItemId === itemToAdd.id ||
+          (inventoryBarcode && item.barcode === inventoryBarcode)
+      );
+
+      if (existingItem) {
+        const existingKey = getPrepItemKey(existingItem);
+
+        return currentBoard.map((item) =>
+          getPrepItemKey(item) === existingKey
+            ? {
+                ...item,
+                plannedQuantity:
+                  normalizeQuantity(item.plannedQuantity || "0") + 1,
+              }
+            : item
+        );
+      }
+
+      return [
+        ...currentBoard,
+        {
+          barcode: inventoryBarcode,
+          inventoryItemId: itemToAdd.id,
+          name: itemToAdd.name,
+          plannedQuantity: 1,
+          currentQuantity: normalizeQuantity(itemToAdd.quantity || "0"),
+          location: itemToAdd.location || "Pantry",
+          category: itemToAdd.category || "Other",
+          isInInventory: true,
+        },
+      ];
+    });
+  }
+
+  function updatePrepQuantity(itemToUpdate, value) {
+    const itemKey = getPrepItemKey(itemToUpdate);
+
     setPrepBoard((currentBoard) =>
       currentBoard.map((item) =>
-        item.barcode === barcodeToUpdate
+        getPrepItemKey(item) === itemKey
           ? { ...item, plannedQuantity: value }
           : item
       )
     );
   }
 
-  function returnPrepItem(barcodeToReturn) {
+  function changePrepQuantity(itemToUpdate, amount) {
+    const currentQuantity = Number(itemToUpdate.plannedQuantity) || 0;
+    const nextQuantity = Math.max(0.1, currentQuantity + amount);
+
+    updatePrepQuantity(itemToUpdate, Number(nextQuantity.toFixed(1)));
+  }
+
+  function returnPrepItem(itemToReturn) {
+    const itemKey = getPrepItemKey(itemToReturn);
+
     setPrepBoard((currentBoard) =>
-      currentBoard.filter((item) => item.barcode !== barcodeToReturn)
+      currentBoard.filter((item) => getPrepItemKey(item) !== itemKey)
     );
     prepScannerInputRef.current?.focus();
   }
@@ -1339,8 +1396,9 @@ function App() {
         preparedItems,
         (prepItem) => prepItem.plannedQuantity,
         (prepItem) => {
+          const processedItemKey = getPrepItemKey(prepItem);
           remainingItems = remainingItems.filter(
-            (item) => item.barcode !== prepItem.barcode
+            (item) => getPrepItemKey(item) !== processedItemKey
           );
         }
       );
@@ -2086,7 +2144,7 @@ function App() {
                     {prepBoard.map((prepItem) => (
                       <article
                         className={`prep-board-item${prepItem.isInInventory ? "" : " not-in-inventory"}`}
-                        key={prepItem.barcode}
+                        key={getPrepItemKey(prepItem)}
                       >
                         <div className="prep-board-product">
                           <strong>{prepItem.name}</strong>
@@ -2097,15 +2155,31 @@ function App() {
                         </div>
                         <label>
                           Planned quantity
-                          <input
-                            type="number"
-                            min="0.1"
-                            step="0.1"
-                            value={prepItem.plannedQuantity}
-                            onChange={(event) =>
-                              updatePrepQuantity(prepItem.barcode, event.target.value)
-                            }
-                          />
+                          <span className="prep-quantity-control">
+                            <button
+                              type="button"
+                              aria-label={`Decrease planned quantity for ${prepItem.name}`}
+                              onClick={() => changePrepQuantity(prepItem, -1)}
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="0.1"
+                              value={prepItem.plannedQuantity}
+                              onChange={(event) =>
+                                updatePrepQuantity(prepItem, event.target.value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              aria-label={`Increase planned quantity for ${prepItem.name}`}
+                              onClick={() => changePrepQuantity(prepItem, 1)}
+                            >
+                              +
+                            </button>
+                          </span>
                         </label>
                         <dl>
                           <div>
@@ -2124,7 +2198,7 @@ function App() {
                         <button
                           type="button"
                           className="secondary-button prep-return-item"
-                          onClick={() => returnPrepItem(prepItem.barcode)}
+                          onClick={() => returnPrepItem(prepItem)}
                         >
                           Return
                         </button>
@@ -2145,6 +2219,7 @@ function App() {
                 </button>
                 <button
                   type="button"
+                  className="prep-use-items-button"
                   onClick={usePrepItems}
                   disabled={
                     savingPrepBoard ||
@@ -2152,6 +2227,7 @@ function App() {
                     prepBoard.length === 0
                   }
                 >
+                  <NavIcon name="use" />
                   {savingPrepBoard ? "Using..." : "Use Items"}
                 </button>
               </div>
@@ -2588,21 +2664,49 @@ function App() {
                           <div className="inventory-card-grid">
                             {group.items.map((item) => {
                               const stockStatus = getStockStatus(item);
+                              const itemBarcode = String(item.barcode || "");
+                              const prepItem = prepBoard.find(
+                                (boardItem) =>
+                                  boardItem.inventoryItemId === item.id ||
+                                  (itemBarcode && boardItem.barcode === itemBarcode)
+                              );
+                              const prepQuantity = prepItem
+                                ? Number(prepItem.plannedQuantity) || 0
+                                : 0;
 
                               return (
-                                <button
+                                <article
+                                  className={`inventory-card-shell${prepItem ? " on-prep-board" : ""}`}
                                   key={item.id}
-                                  type="button"
-                                  className={`inventory-card stock-${stockStatus.toLowerCase()}`}
-                                  aria-label={`View details for ${item.name}`}
-                                  onClick={() => setSelectedInventoryItem(item)}
                                 >
-                                  <InventoryItemVisual item={item} stockStatus={stockStatus} />
+                                  <button
+                                    type="button"
+                                    className={`inventory-card stock-${stockStatus.toLowerCase()}`}
+                                    aria-label={`View details for ${item.name}`}
+                                    onClick={() => setSelectedInventoryItem(item)}
+                                  >
+                                    <InventoryItemVisual item={item} stockStatus={stockStatus} />
 
-                                  <div className="inventory-card-body">
-                                    <h4>{item.name} <span>({item.quantity})</span></h4>
-                                  </div>
-                                </button>
+                                    <div className="inventory-card-body">
+                                      <h4>{item.name} <span>({item.quantity})</span></h4>
+                                    </div>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className={`inventory-prep-action${prepItem ? " active" : ""}`}
+                                    aria-label={`Add ${item.name} to Prep Board${prepItem ? `, currently ${prepQuantity}` : ""}`}
+                                    title="Add to Prep Board"
+                                    onClick={() => addInventoryItemToPrep(item)}
+                                  >
+                                    <NavIcon name="prep" />
+                                    {prepItem && (
+                                      <span className="inventory-prep-badge" aria-hidden="true">
+                                        {prepQuantity}
+                                      </span>
+                                    )}
+                                  </button>
+                                </article>
                               );
                             })}
                           </div>

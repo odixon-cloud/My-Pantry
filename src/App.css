@@ -1462,10 +1462,53 @@ select {
 }
 
 .prep-board-item > label input {
+  min-width: 0;
   min-height: 44px;
   padding: 8px 10px;
+  border-radius: 0;
   font-size: 13px;
   letter-spacing: normal;
+  text-align: center;
+}
+
+.prep-quantity-control {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  background: white;
+}
+
+.prep-quantity-control:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(74, 124, 99, 0.13);
+}
+
+.prep-quantity-control button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #314b7c;
+  background: #edf2fc;
+  font-size: 20px;
+  box-shadow: none;
+}
+
+.prep-quantity-control button:hover {
+  color: #203760;
+  background: #dfe8fa;
+}
+
+.prep-quantity-control input {
+  border-width: 0 1px;
+  box-shadow: none;
+}
+
+.prep-quantity-control input:focus {
+  box-shadow: none;
 }
 
 .prep-board-item dl {
@@ -1505,6 +1548,18 @@ select {
 
 .prep-board-actions button {
   min-width: 128px;
+}
+
+.prep-use-items-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.prep-use-items-button svg {
+  width: 19px;
+  height: 19px;
 }
 
 .use-item-search-row {
@@ -1916,7 +1971,15 @@ select {
   gap: 16px;
 }
 
+.inventory-card-shell {
+  position: relative;
+  min-width: 0;
+  border-radius: 18px;
+}
+
 .inventory-card {
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1931,6 +1994,69 @@ select {
   text-align: left;
   cursor: pointer;
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.inventory-card-shell.on-prep-board .inventory-card {
+  border-color: #7897d1;
+  box-shadow: 0 0 0 2px rgba(120, 151, 209, 0.16), 0 10px 25px rgba(42, 65, 54, 0.1);
+}
+
+.inventory-prep-action {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 14px;
+  color: #314b7c;
+  background: rgba(232, 238, 252, 0.94);
+  box-shadow: 0 6px 15px rgba(46, 65, 102, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+.inventory-prep-action svg {
+  width: 20px;
+  height: 20px;
+}
+
+.inventory-prep-action:hover {
+  color: #203760;
+  background: #dce6fb;
+  transform: translateY(-1px);
+}
+
+.inventory-prep-action:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.inventory-prep-action.active {
+  color: white;
+  border-color: #526fa9;
+  background: linear-gradient(135deg, #6f8fca, #496aa7);
+}
+
+.inventory-prep-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid white;
+  border-radius: 999px;
+  color: white;
+  background: #c14f43;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .inventory-card:hover {
