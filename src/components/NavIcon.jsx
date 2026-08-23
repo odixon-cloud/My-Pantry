@@ -27,6 +27,13 @@ function NavIcon({ name }) {
         <path d="m8 10 4-6 4 6M8 14v2M12 14v2M16 14v2" />
       </>
     ),
+    prep: (
+      <>
+        <rect x="4" y="4.5" width="16" height="15" rx="2.5" />
+        <circle cx="16.5" cy="8" r="1" />
+        <path d="M8 8.5h4M8 12h8M8 15.5h6" />
+      </>
+    ),
     add: (
       <>
         <circle cx="12" cy="12" r="9" />

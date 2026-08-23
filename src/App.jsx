@@ -53,6 +53,10 @@ const SECTION_DETAILS = {
     title: "Use Mode",
     subtitle: "Scan a batch of used items before updating inventory.",
   },
+  prep: {
+    title: "Prep Board",
+    subtitle: "Plan items for possible use without changing inventory.",
+  },
   settings: {
     title: "Item Settings",
     subtitle: "Manage item preferences and prepare future organization tools.",
@@ -94,6 +98,10 @@ function App() {
   const [useBatch, setUseBatch] = useState([]);
   const [useLookupsInProgress, setUseLookupsInProgress] = useState(0);
   const [savingUseBatch, setSavingUseBatch] = useState(false);
+  const [prepScannerBarcode, setPrepScannerBarcode] = useState("");
+  const [prepBoard, setPrepBoard] = useState([]);
+  const [prepLookupsInProgress, setPrepLookupsInProgress] = useState(0);
+  const [savingPrepBoard, setSavingPrepBoard] = useState(false);
   const [useSearchTerm, setUseSearchTerm] = useState("");
   const [selectedUseItem, setSelectedUseItem] = useState(null);
   const [useQuantity, setUseQuantity] = useState("1");
@@ -114,6 +122,9 @@ function App() {
   const useScannerInputRef = useRef(null);
   const useSessionRef = useRef(0);
   const usePendingLookupsRef = useRef(0);
+  const prepScannerInputRef = useRef(null);
+  const prepSessionRef = useRef(0);
+  const prepPendingLookupsRef = useRef(0);
   const inventorySearchRef = useRef(null);
 
   useEffect(() => {
@@ -155,6 +166,18 @@ function App() {
 
     return () => window.clearTimeout(focusTimer);
   }, [activeSection, showScanner, savingUseBatch]);
+
+  useEffect(() => {
+    if (activeSection !== "prep" || savingPrepBoard) {
+      return undefined;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      prepScannerInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeSection, savingPrepBoard]);
 
   useEffect(() => {
     if (!selectedInventoryItem) {
@@ -909,6 +932,48 @@ function App() {
     setActiveSection("dashboard");
   }
 
+  async function findInventoryItemForBarcode(code, product, logPrefix) {
+    const barcodeMatch = await supabase
+      .from("pantry_items")
+      .select("*")
+      .eq("barcode", code)
+      .maybeSingle();
+
+    if (barcodeMatch.error) {
+      console.log(`${logPrefix} barcode inventory lookup error:`, barcodeMatch.error);
+    }
+
+    let matchingItem = barcodeMatch.data;
+
+    if (!matchingItem && product.productName.trim()) {
+      const rememberedMatch = await supabase
+        .from("pantry_items")
+        .select("*")
+        .eq("name", product.productName.trim())
+        .eq("location", product.location || "Pantry")
+        .eq("category", product.category || "Other")
+        .maybeSingle();
+
+      if (rememberedMatch.error) {
+        console.log(`${logPrefix} remembered inventory lookup error:`, rememberedMatch.error);
+      } else {
+        matchingItem = rememberedMatch.data;
+      }
+    }
+
+    return (
+      matchingItem ||
+      items.find((item) => String(item.barcode || "") === code) ||
+      items.find(
+        (item) =>
+          item.name === product.productName.trim() &&
+          item.location === (product.location || "Pantry") &&
+          item.category === (product.category || "Other")
+      ) ||
+      null
+    );
+  }
+
   async function submitUseBarcode(event) {
     event.preventDefault();
 
@@ -962,47 +1027,11 @@ function App() {
         return;
       }
 
-      const barcodeMatch = await supabase
-        .from("pantry_items")
-        .select("*")
-        .eq("barcode", completedBarcode)
-        .maybeSingle();
-
-      if (barcodeMatch.error) {
-        console.log("Use Mode barcode inventory lookup error:", barcodeMatch.error);
-      }
-
-      let matchingItem = barcodeMatch.data;
-
-      if (!matchingItem && product.productName.trim()) {
-        const rememberedMatch = await supabase
-          .from("pantry_items")
-          .select("*")
-          .eq("name", product.productName.trim())
-          .eq("location", product.location || "Pantry")
-          .eq("category", product.category || "Other")
-          .maybeSingle();
-
-        if (rememberedMatch.error) {
-          console.log("Use Mode remembered inventory lookup error:", rememberedMatch.error);
-        } else {
-          matchingItem = rememberedMatch.data;
-        }
-      }
-
-      if (!matchingItem) {
-        matchingItem =
-          items.find(
-            (item) => String(item.barcode || "") === completedBarcode
-          ) ||
-          items.find(
-            (item) =>
-              item.name === product.productName.trim() &&
-              item.location === (product.location || "Pantry") &&
-              item.category === (product.category || "Other")
-          ) ||
-          null;
-      }
+      const matchingItem = await findInventoryItemForBarcode(
+        completedBarcode,
+        product,
+        "Use Mode"
+      );
 
       setUseBatch((currentBatch) => {
         const duplicateItem = currentBatch.find(
@@ -1048,6 +1077,47 @@ function App() {
     }
   }
 
+  async function processInventoryRemovals(
+    batchItems,
+    getRemovalQuantity,
+    onItemProcessed
+  ) {
+    for (const batchItem of batchItems) {
+      if (!batchItem.isInInventory || batchItem.inventoryItemId === null) {
+        onItemProcessed(batchItem);
+        continue;
+      }
+
+      const { data: currentItem, error: lookupError } = await supabase
+        .from("pantry_items")
+        .select("*")
+        .eq("id", batchItem.inventoryItemId)
+        .maybeSingle();
+
+      if (lookupError) {
+        throw lookupError;
+      }
+
+      if (currentItem) {
+        const currentQuantity = normalizeQuantity(currentItem.quantity || "0");
+        const newQuantity = Math.max(
+          0,
+          currentQuantity - getRemovalQuantity(batchItem)
+        );
+        const { error: updateError } = await supabase
+          .from("pantry_items")
+          .update({ quantity: newQuantity.toString() })
+          .eq("id", currentItem.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
+
+      onItemProcessed(batchItem);
+    }
+  }
+
   async function removeUseBatch() {
     if (usePendingLookupsRef.current > 0) {
       alert("Wait for the current barcode lookup to finish.");
@@ -1065,44 +1135,15 @@ function App() {
     let remainingBatch = [...useBatch];
 
     try {
-      for (const batchItem of useBatch) {
-        if (!batchItem.isInInventory || batchItem.inventoryItemId === null) {
+      await processInventoryRemovals(
+        useBatch,
+        (batchItem) => batchItem.removalQuantity,
+        (batchItem) => {
           remainingBatch = remainingBatch.filter(
             (item) => item.barcode !== batchItem.barcode
           );
-          continue;
         }
-
-        const { data: currentItem, error: lookupError } = await supabase
-          .from("pantry_items")
-          .select("*")
-          .eq("id", batchItem.inventoryItemId)
-          .maybeSingle();
-
-        if (lookupError) {
-          throw lookupError;
-        }
-
-        if (currentItem) {
-          const currentQuantity = normalizeQuantity(currentItem.quantity || "0");
-          const newQuantity = Math.max(
-            0,
-            currentQuantity - batchItem.removalQuantity
-          );
-          const { error: updateError } = await supabase
-            .from("pantry_items")
-            .update({ quantity: newQuantity.toString() })
-            .eq("id", currentItem.id);
-
-          if (updateError) {
-            throw updateError;
-          }
-        }
-
-        remainingBatch = remainingBatch.filter(
-          (item) => item.barcode !== batchItem.barcode
-        );
-      }
+      );
 
       setUseBatch([]);
       await fetchItems();
@@ -1125,6 +1166,197 @@ function App() {
     setUseScannerBarcode("");
     setUseBatch([]);
     setActiveSection("dashboard");
+  }
+
+  async function submitPrepBarcode(event) {
+    event.preventDefault();
+
+    const completedBarcode = prepScannerBarcode.trim();
+
+    setPrepScannerBarcode("");
+    prepScannerInputRef.current?.focus();
+
+    if (!completedBarcode) {
+      return;
+    }
+
+    if (!/^\d+$/.test(completedBarcode)) {
+      alert("A barcode can only contain numbers.");
+      prepScannerInputRef.current?.focus();
+      return;
+    }
+
+    const existingPrepItem = prepBoard.find(
+      (item) => item.barcode === completedBarcode
+    );
+
+    if (existingPrepItem) {
+      setPrepBoard((currentBoard) =>
+        currentBoard.map((item) =>
+          item.barcode === completedBarcode
+            ? {
+                ...item,
+                plannedQuantity:
+                  normalizeQuantity(item.plannedQuantity || "0") + 1,
+              }
+            : item
+        )
+      );
+      prepScannerInputRef.current?.focus();
+      return;
+    }
+
+    const sessionId = prepSessionRef.current;
+
+    prepPendingLookupsRef.current += 1;
+    setPrepLookupsInProgress((current) => current + 1);
+
+    try {
+      const product = await getBarcodeProduct(completedBarcode, {
+        fallbackCategory: "Other",
+        fallbackLocation: "Pantry",
+        fallbackPriority: 3,
+        fallbackTargetQuantity: "",
+        rememberNewProduct: false,
+        allowUnknownProduct: true,
+      });
+
+      if (!product || prepSessionRef.current !== sessionId) {
+        return;
+      }
+
+      const matchingItem = await findInventoryItemForBarcode(
+        completedBarcode,
+        product,
+        "Prep Board"
+      );
+
+      setPrepBoard((currentBoard) => {
+        const duplicateItem = currentBoard.find(
+          (item) => item.barcode === completedBarcode
+        );
+
+        if (duplicateItem) {
+          return currentBoard.map((item) =>
+            item.barcode === completedBarcode
+              ? {
+                  ...item,
+                  plannedQuantity:
+                    normalizeQuantity(item.plannedQuantity || "0") + 1,
+                }
+              : item
+          );
+        }
+
+        return [
+          ...currentBoard,
+          {
+            barcode: completedBarcode,
+            inventoryItemId: matchingItem?.id ?? null,
+            name:
+              matchingItem?.name ||
+              product.productName.trim() ||
+              "Unknown barcode",
+            plannedQuantity: 1,
+            currentQuantity: matchingItem
+              ? normalizeQuantity(matchingItem.quantity || "0")
+              : 0,
+            location: matchingItem?.location || product.location || "Pantry",
+            category: matchingItem?.category || product.category || "Other",
+            isInInventory: Boolean(matchingItem),
+          },
+        ];
+      });
+    } finally {
+      if (prepSessionRef.current === sessionId) {
+        prepPendingLookupsRef.current = Math.max(
+          0,
+          prepPendingLookupsRef.current - 1
+        );
+        setPrepLookupsInProgress((current) => Math.max(0, current - 1));
+        prepScannerInputRef.current?.focus();
+      }
+    }
+  }
+
+  function updatePrepQuantity(barcodeToUpdate, value) {
+    setPrepBoard((currentBoard) =>
+      currentBoard.map((item) =>
+        item.barcode === barcodeToUpdate
+          ? { ...item, plannedQuantity: value }
+          : item
+      )
+    );
+  }
+
+  function returnPrepItem(barcodeToReturn) {
+    setPrepBoard((currentBoard) =>
+      currentBoard.filter((item) => item.barcode !== barcodeToReturn)
+    );
+    prepScannerInputRef.current?.focus();
+  }
+
+  function returnAllPrepItems() {
+    prepSessionRef.current += 1;
+    prepPendingLookupsRef.current = 0;
+    setPrepLookupsInProgress(0);
+    setPrepScannerBarcode("");
+    setPrepBoard([]);
+    prepScannerInputRef.current?.focus();
+  }
+
+  async function usePrepItems() {
+    if (prepPendingLookupsRef.current > 0) {
+      alert("Wait for the current barcode lookup to finish.");
+      prepScannerInputRef.current?.focus();
+      return;
+    }
+
+    if (prepBoard.length === 0) {
+      alert("Add at least one item to the Prep Board first.");
+      prepScannerInputRef.current?.focus();
+      return;
+    }
+
+    const preparedItems = [];
+
+    for (const prepItem of prepBoard) {
+      const parsedQuantity = normalizeQuantity(prepItem.plannedQuantity);
+
+      if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
+        alert(`Enter a planned quantity greater than 0 for ${prepItem.name}.`);
+        return;
+      }
+
+      preparedItems.push({ ...prepItem, plannedQuantity: parsedQuantity });
+    }
+
+    setSavingPrepBoard(true);
+    let remainingItems = [...preparedItems];
+
+    try {
+      await processInventoryRemovals(
+        preparedItems,
+        (prepItem) => prepItem.plannedQuantity,
+        (prepItem) => {
+          remainingItems = remainingItems.filter(
+            (item) => item.barcode !== prepItem.barcode
+          );
+        }
+      );
+
+      setPrepBoard([]);
+      await fetchItems();
+      alert("Prep Board items were used from your pantry.");
+    } catch (error) {
+      console.log(error);
+      setPrepBoard(remainingItems);
+      await fetchItems();
+      alert(error.message || "The Prep Board could not be processed.");
+    } finally {
+      setSavingPrepBoard(false);
+      prepScannerInputRef.current?.focus();
+    }
   }
 
   function editItem(item) {
@@ -1793,6 +2025,139 @@ function App() {
             </section>
           )}
 
+          {activeSection === "prep" && (
+            <section className="feature-panel prep-board-section" aria-labelledby="prep-board-heading">
+              <div className="prep-board-heading">
+                <div className="panel-heading">
+                  <span className="eyebrow">Temporary planning</span>
+                  <h2 id="prep-board-heading">Prep Board</h2>
+                  <p>Plan possible use without changing inventory until you choose Use Items.</p>
+                </div>
+                <span className="prep-board-count">
+                  {prepBoard.reduce(
+                    (total, item) => total + (Number(item.plannedQuantity) || 0),
+                    0
+                  )} planned
+                </span>
+              </div>
+
+              <form className="prep-scanner-form" onSubmit={submitPrepBarcode}>
+                <label htmlFor="prep-scanner-input">
+                  Bluetooth Barcode Scanner
+                  <input
+                    id="prep-scanner-input"
+                    ref={prepScannerInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    placeholder="Scan a barcode"
+                    value={prepScannerBarcode}
+                    disabled={savingPrepBoard}
+                    onChange={(event) => setPrepScannerBarcode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        submitPrepBarcode(event);
+                      }
+                    }}
+                  />
+                </label>
+                <span aria-live="polite">
+                  {prepLookupsInProgress > 0
+                    ? `Looking up ${prepLookupsInProgress} ${prepLookupsInProgress === 1 ? "barcode" : "barcodes"}...`
+                    : "Ready to scan"}
+                </span>
+              </form>
+
+              <div className="prep-board" aria-live="polite" aria-busy={prepLookupsInProgress > 0}>
+                <div className="prep-board-title-row">
+                  <h3>Planned items</h3>
+                  <span>{prepBoard.length} unique</span>
+                </div>
+
+                {prepBoard.length === 0 ? (
+                  <div className="prep-board-empty">
+                    <span className="empty-state-icon"><NavIcon name="prep" /></span>
+                    <strong>Your Prep Board is clear</strong>
+                    <p>Scan an item to plan a quantity without changing inventory.</p>
+                  </div>
+                ) : (
+                  <div className="prep-board-list">
+                    {prepBoard.map((prepItem) => (
+                      <article
+                        className={`prep-board-item${prepItem.isInInventory ? "" : " not-in-inventory"}`}
+                        key={prepItem.barcode}
+                      >
+                        <div className="prep-board-product">
+                          <strong>{prepItem.name}</strong>
+                          <span>{prepItem.barcode}</span>
+                          {!prepItem.isInInventory && (
+                            <small>Not in inventory — no quantity will be changed</small>
+                          )}
+                        </div>
+                        <label>
+                          Planned quantity
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={prepItem.plannedQuantity}
+                            onChange={(event) =>
+                              updatePrepQuantity(prepItem.barcode, event.target.value)
+                            }
+                          />
+                        </label>
+                        <dl>
+                          <div>
+                            <dt>Current</dt>
+                            <dd>{prepItem.isInInventory ? prepItem.currentQuantity : "—"}</dd>
+                          </div>
+                          <div>
+                            <dt>Location</dt>
+                            <dd>{prepItem.location}</dd>
+                          </div>
+                          <div>
+                            <dt>Category</dt>
+                            <dd>{prepItem.category}</dd>
+                          </div>
+                        </dl>
+                        <button
+                          type="button"
+                          className="secondary-button prep-return-item"
+                          onClick={() => returnPrepItem(prepItem.barcode)}
+                        >
+                          Return
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="prep-board-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={returnAllPrepItems}
+                  disabled={savingPrepBoard || prepBoard.length === 0}
+                >
+                  Return All
+                </button>
+                <button
+                  type="button"
+                  onClick={usePrepItems}
+                  disabled={
+                    savingPrepBoard ||
+                    prepLookupsInProgress > 0 ||
+                    prepBoard.length === 0
+                  }
+                >
+                  {savingPrepBoard ? "Using..." : "Use Items"}
+                </button>
+              </div>
+            </section>
+          )}
+
           {activeSection === "use" && (
             <section className="feature-panel use-item-section" aria-labelledby="use-mode-heading">
               <div className="use-mode-heading">
@@ -2261,6 +2626,22 @@ function App() {
                   <NavIcon name="stock" />
                 </span>
                 <span>Stock</span>
+              </button>
+
+              <button
+                type="button"
+                className={`dashboard-floating-action prep-action${
+                  activeSection === "inventory" ? " inventory-prep-drop-target" : ""
+                }`}
+                data-future-drop-target={
+                  activeSection === "inventory" ? "inventory-prep-board" : undefined
+                }
+                onClick={() => navigateToSection("prep")}
+              >
+                <span className="dashboard-floating-icon" aria-hidden="true">
+                  <NavIcon name="prep" />
+                </span>
+                <span>Prep Board</span>
               </button>
 
               <button
