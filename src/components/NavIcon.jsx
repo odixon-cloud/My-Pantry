@@ -21,6 +21,12 @@ function NavIcon({ name }) {
         <circle cx="18" cy="20" r="1" />
       </>
     ),
+    stock: (
+      <>
+        <path d="M4 10h16l-1.4 9H5.4L4 10Z" />
+        <path d="m8 10 4-6 4 6M8 14v2M12 14v2M16 14v2" />
+      </>
+    ),
     add: (
       <>
         <circle cx="12" cy="12" r="9" />

@@ -23,6 +23,7 @@ const PRIMARY_NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "home" },
   { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "inventory" },
   { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "shopping" },
+  { id: "stock", label: "Stock", mobileLabel: "Stock", icon: "stock" },
   { id: "add", label: "Add Item", mobileLabel: "Add", icon: "add" },
   { id: "use", label: "Use Item", mobileLabel: "Use", icon: "use" },
   { id: "settings", label: "Item Settings", icon: "settings" },
@@ -42,6 +43,10 @@ const SECTION_DETAILS = {
   shopping: {
     title: "Shopping List",
     subtitle: "Build a list from the quantities you already track.",
+  },
+  stock: {
+    title: "Stock",
+    subtitle: "Scan a batch of items before adding them to inventory.",
   },
   add: {
     title: "Add Item",
@@ -88,6 +93,11 @@ function App() {
   const [purchasedQuantities, setPurchasedQuantities] = useState({});
   const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
   const [scannerMode, setScannerMode] = useState("add");
+  const [stockLocation, setStockLocation] = useState("");
+  const [stockScannerBarcode, setStockScannerBarcode] = useState("");
+  const [stockBatch, setStockBatch] = useState([]);
+  const [stockLookupsInProgress, setStockLookupsInProgress] = useState(0);
+  const [savingStockBatch, setSavingStockBatch] = useState(false);
   const [useSearchTerm, setUseSearchTerm] = useState("");
   const [selectedUseItem, setSelectedUseItem] = useState(null);
   const [useQuantity, setUseQuantity] = useState("1");
@@ -102,6 +112,9 @@ function App() {
   const [deletingSelectedItem, setDeletingSelectedItem] = useState(false);
   const scannerRef = useRef(null);
   const scannerBarcodeInputRef = useRef(null);
+  const stockScannerInputRef = useRef(null);
+  const stockSessionRef = useRef(0);
+  const stockPendingLookupsRef = useRef(0);
   const inventorySearchRef = useRef(null);
 
   useEffect(() => {
@@ -119,6 +132,18 @@ function App() {
 
     return () => window.clearTimeout(focusTimer);
   }, [activeSection, showScanner]);
+
+  useEffect(() => {
+    if (activeSection !== "stock" || !stockLocation || savingStockBatch) {
+      return undefined;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      stockScannerInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeSection, stockLocation, savingStockBatch]);
 
   useEffect(() => {
     if (!selectedInventoryItem) {
@@ -496,7 +521,14 @@ function App() {
     }, 150);
   }
 
-  async function lookupBarcode(code) {
+  async function getBarcodeProduct(
+    code,
+    {
+      fallbackCategory = category,
+      fallbackLocation = location,
+      fallbackPriority = Number.parseInt(priority, 10),
+    } = {}
+  ) {
     try {
       const { data: cachedItem, error: cacheError } = await supabase
         .from("barcode_lookup")
@@ -509,24 +541,12 @@ function App() {
       }
 
       if (cachedItem) {
-        setItemName(cachedItem.product_name || "");
-
-        if (cachedItem.category) {
-          setCategory(cachedItem.category);
-        }
-
-        if (cachedItem.location) {
-          setLocation(cachedItem.location);
-        }
-
-        if (
-          cachedItem.priority !== null &&
-          cachedItem.priority !== undefined
-        ) {
-          setPriority(String(cachedItem.priority));
-        }
-
-        return;
+        return {
+          productName: cachedItem.product_name || "",
+          category: cachedItem.category || fallbackCategory,
+          location: cachedItem.location || fallbackLocation,
+          priority: cachedItem.priority ?? fallbackPriority,
+        };
       }
 
       const response = await fetch(
@@ -542,21 +562,44 @@ function App() {
       ) {
         const productName = data.product.product_name;
 
-        setItemName(productName);
-
         await saveBarcodeMemory({
           code,
           productName,
-          savedCategory: category,
-          savedLocation: location,
-          savedPriority: Number.parseInt(priority, 10),
+          savedCategory: fallbackCategory,
+          savedLocation: fallbackLocation,
+          savedPriority: fallbackPriority,
         });
+
+        return {
+          productName,
+          category: fallbackCategory,
+          location: fallbackLocation,
+          priority: fallbackPriority,
+        };
       } else {
         alert("Product not found");
+        return null;
       }
     } catch (error) {
       console.log(error);
       alert("Lookup failed");
+      return null;
+    }
+  }
+
+  async function lookupBarcode(code) {
+    const product = await getBarcodeProduct(code);
+
+    if (!product) {
+      return;
+    }
+
+    setItemName(product.productName);
+    setCategory(product.category);
+    setLocation(product.location);
+
+    if (product.priority !== null && product.priority !== undefined) {
+      setPriority(String(product.priority));
     }
   }
 
@@ -586,6 +629,177 @@ function App() {
     } finally {
       scannerBarcodeInputRef.current?.focus();
     }
+  }
+
+  function beginStockMode(selectedLocation) {
+    stockSessionRef.current += 1;
+    stockPendingLookupsRef.current = 0;
+    setStockLookupsInProgress(0);
+    setStockScannerBarcode("");
+    setStockBatch([]);
+    setStockLocation(selectedLocation);
+  }
+
+  async function submitStockBarcode(event) {
+    event.preventDefault();
+
+    const completedBarcode = stockScannerBarcode.trim();
+
+    setStockScannerBarcode("");
+    stockScannerInputRef.current?.focus();
+
+    if (!completedBarcode) {
+      return;
+    }
+
+    if (!/^\d+$/.test(completedBarcode)) {
+      alert("A barcode can only contain numbers.");
+      stockScannerInputRef.current?.focus();
+      return;
+    }
+
+    const scanLocation = stockLocation;
+    const sessionId = stockSessionRef.current;
+
+    stockPendingLookupsRef.current += 1;
+    setStockLookupsInProgress((current) => current + 1);
+
+    try {
+      const product = await getBarcodeProduct(completedBarcode, {
+        fallbackCategory: "Other",
+        fallbackLocation: scanLocation,
+        fallbackPriority: 3,
+      });
+
+      if (
+        !product ||
+        !product.productName.trim() ||
+        stockSessionRef.current !== sessionId
+      ) {
+        return;
+      }
+
+      setStockBatch((currentBatch) => {
+        const existingItem = currentBatch.find(
+          (item) => item.barcode === completedBarcode
+        );
+
+        if (existingItem) {
+          return currentBatch.map((item) =>
+            item.barcode === completedBarcode
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        }
+
+        return [
+          ...currentBatch,
+          {
+            barcode: completedBarcode,
+            name: product.productName.trim(),
+            quantity: 1,
+            category: product.category || "Other",
+            location: scanLocation,
+            priority: product.priority ?? 3,
+          },
+        ];
+      });
+    } finally {
+      if (stockSessionRef.current === sessionId) {
+        stockPendingLookupsRef.current = Math.max(
+          0,
+          stockPendingLookupsRef.current - 1
+        );
+        setStockLookupsInProgress((current) => Math.max(0, current - 1));
+        stockScannerInputRef.current?.focus();
+      }
+    }
+  }
+
+  async function addStockBatch() {
+    if (stockPendingLookupsRef.current > 0) {
+      alert("Wait for the current barcode lookup to finish.");
+      stockScannerInputRef.current?.focus();
+      return;
+    }
+
+    if (stockBatch.length === 0) {
+      alert("Scan at least one item first.");
+      stockScannerInputRef.current?.focus();
+      return;
+    }
+
+    setSavingStockBatch(true);
+    let remainingBatch = [...stockBatch];
+
+    try {
+      for (const batchItem of stockBatch) {
+        const { data: existingItem, error: lookupError } = await supabase
+          .from("pantry_items")
+          .select("*")
+          .eq("name", batchItem.name)
+          .eq("location", batchItem.location)
+          .eq("category", batchItem.category)
+          .maybeSingle();
+
+        if (lookupError) {
+          throw lookupError;
+        }
+
+        let saveResult;
+
+        if (existingItem) {
+          const currentQuantity = normalizeQuantity(existingItem.quantity || "0");
+          const newQuantity = currentQuantity + batchItem.quantity;
+
+          saveResult = await supabase
+            .from("pantry_items")
+            .update({ quantity: newQuantity.toString() })
+            .eq("id", existingItem.id);
+        } else {
+          saveResult = await supabase.from("pantry_items").insert([
+            {
+              name: batchItem.name,
+              quantity: batchItem.quantity.toString(),
+              location: batchItem.location,
+              barcode: batchItem.barcode,
+              category: batchItem.category,
+              priority: batchItem.priority,
+            },
+          ]);
+        }
+
+        if (saveResult.error) {
+          throw saveResult.error;
+        }
+
+        remainingBatch = remainingBatch.filter(
+          (item) => item.barcode !== batchItem.barcode
+        );
+      }
+
+      setStockBatch([]);
+      await fetchItems();
+      alert("All stocked items were added to your pantry.");
+    } catch (error) {
+      console.log(error);
+      setStockBatch(remainingBatch);
+      await fetchItems();
+      alert(error.message || "The stock batch could not be added.");
+    } finally {
+      setSavingStockBatch(false);
+      stockScannerInputRef.current?.focus();
+    }
+  }
+
+  function cancelStockMode() {
+    stockSessionRef.current += 1;
+    stockPendingLookupsRef.current = 0;
+    setStockLookupsInProgress(0);
+    setStockScannerBarcode("");
+    setStockBatch([]);
+    setStockLocation("");
+    setActiveSection("dashboard");
   }
 
   function editItem(item) {
@@ -965,6 +1179,15 @@ function App() {
   }, []);
 
   function navigateToSection(section) {
+    if (section === "stock" && activeSection !== "stock") {
+      stockSessionRef.current += 1;
+      stockPendingLookupsRef.current = 0;
+      setStockLookupsInProgress(0);
+      setStockScannerBarcode("");
+      setStockBatch([]);
+      setStockLocation("");
+    }
+
     setActiveSection(section);
 
     if (section === "inventory") {
@@ -1166,6 +1389,134 @@ function App() {
                   <button type="button" className="quick-action-button" onClick={() => navigateToSection("shopping")}><span><NavIcon name="shopping" /></span>Shopping List</button>
                 </div>
               </div>
+            </section>
+          )}
+
+          {activeSection === "stock" && (
+            <section className="feature-panel stock-mode-section" aria-labelledby="stock-heading">
+              {!stockLocation ? (
+                <div className="stock-location-step">
+                  <div className="panel-heading">
+                    <span className="eyebrow">Start a batch</span>
+                    <h2 id="stock-heading">Where are you stocking?</h2>
+                    <p>Every item in this batch will use the selected location.</p>
+                  </div>
+                  <div className="stock-location-options" role="group" aria-label="Stock location">
+                    {LOCATION_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className="stock-location-button"
+                        onClick={() => beginStockMode(option)}
+                      >
+                        <span className="stock-location-icon"><NavIcon name="stock" /></span>
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="secondary-button" onClick={cancelStockMode}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="stock-mode-heading">
+                    <div className="panel-heading">
+                      <span className="eyebrow">Stock Mode</span>
+                      <h2 id="stock-heading">Stocking {stockLocation}</h2>
+                      <p>Scan each product. Nothing is added to inventory until you choose Add All.</p>
+                    </div>
+                    <span className="stock-batch-count">
+                      {stockBatch.reduce((total, item) => total + item.quantity, 0)} items
+                    </span>
+                  </div>
+
+                  <form className="stock-scanner-form" onSubmit={submitStockBarcode}>
+                    <label htmlFor="stock-scanner-input">
+                      Bluetooth Barcode Scanner
+                      <input
+                        id="stock-scanner-input"
+                        ref={stockScannerInputRef}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        enterKeyHint="done"
+                        placeholder="Scan a barcode"
+                        value={stockScannerBarcode}
+                        disabled={savingStockBatch}
+                        onChange={(event) => setStockScannerBarcode(event.target.value)}
+                      />
+                    </label>
+                    <span aria-live="polite">
+                      {stockLookupsInProgress > 0
+                        ? `Looking up ${stockLookupsInProgress} ${stockLookupsInProgress === 1 ? "barcode" : "barcodes"}...`
+                        : "Ready to scan"}
+                    </span>
+                  </form>
+
+                  <div className="stock-batch" aria-live="polite" aria-busy={stockLookupsInProgress > 0}>
+                    <div className="stock-batch-title-row">
+                      <h3>Current batch</h3>
+                      <span>{stockBatch.length} unique</span>
+                    </div>
+
+                    {stockBatch.length === 0 ? (
+                      <div className="stock-batch-empty">
+                        <span className="empty-state-icon"><NavIcon name="stock" /></span>
+                        <strong>Ready for your first scan</strong>
+                        <p>Each new barcode starts with a quantity of 1.</p>
+                      </div>
+                    ) : (
+                      <div className="stock-batch-list">
+                        {stockBatch.map((batchItem) => (
+                          <article className="stock-batch-item" key={batchItem.barcode}>
+                            <div className="stock-batch-product">
+                              <strong>{batchItem.name}</strong>
+                              <span>{batchItem.barcode}</span>
+                            </div>
+                            <dl>
+                              <div>
+                                <dt>Quantity</dt>
+                                <dd>{batchItem.quantity}</dd>
+                              </div>
+                              <div>
+                                <dt>Category</dt>
+                                <dd>{batchItem.category}</dd>
+                              </div>
+                              <div>
+                                <dt>Location</dt>
+                                <dd>{batchItem.location}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="stock-mode-actions">
+                    <button
+                      type="button"
+                      onClick={addStockBatch}
+                      disabled={
+                        savingStockBatch ||
+                        stockLookupsInProgress > 0 ||
+                        stockBatch.length === 0
+                      }
+                    >
+                      {savingStockBatch ? "Adding..." : "Add All"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={cancelStockMode}
+                      disabled={savingStockBatch}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
           )}
 
