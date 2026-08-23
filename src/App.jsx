@@ -99,6 +99,7 @@ function App() {
   const [useLookupsInProgress, setUseLookupsInProgress] = useState(0);
   const [savingUseBatch, setSavingUseBatch] = useState(false);
   const [prepScannerBarcode, setPrepScannerBarcode] = useState("");
+  const [prepSearchTerm, setPrepSearchTerm] = useState("");
   const [prepBoard, setPrepBoard] = useState([]);
   const [prepLookupsInProgress, setPrepLookupsInProgress] = useState(0);
   const [savingPrepBoard, setSavingPrepBoard] = useState(false);
@@ -1660,6 +1661,29 @@ function App() {
         .slice(0, 8)
     : [];
 
+  const normalizedPrepSearch = prepSearchTerm.trim().toLowerCase();
+  const matchingPrepSearchItems = normalizedPrepSearch
+    ? items
+        .filter((item) =>
+          (item.name || "").toLowerCase().includes(normalizedPrepSearch)
+        )
+        .sort((firstItem, secondItem) => {
+          const firstStartsWith = (firstItem.name || "")
+            .toLowerCase()
+            .startsWith(normalizedPrepSearch);
+          const secondStartsWith = (secondItem.name || "")
+            .toLowerCase()
+            .startsWith(normalizedPrepSearch);
+
+          if (firstStartsWith !== secondStartsWith) {
+            return firstStartsWith ? -1 : 1;
+          }
+
+          return (firstItem.name || "").localeCompare(secondItem.name || "");
+        })
+        .slice(0, 10)
+    : [];
+
   const dashboardShoppingItems = selectShoppingListItems(items, "full");
   const dashboardAttentionItems = items
     .filter((item) => {
@@ -2127,6 +2151,68 @@ function App() {
                 </span>
               </form>
 
+              <div className="prep-search-panel">
+                <label htmlFor="prep-board-search">Search inventory</label>
+                <div className="prep-search-input-wrap">
+                  <input
+                    id="prep-board-search"
+                    type="search"
+                    autoComplete="off"
+                    placeholder="Search pantry items by name..."
+                    value={prepSearchTerm}
+                    onChange={(event) => setPrepSearchTerm(event.target.value)}
+                  />
+                  {prepSearchTerm && (
+                    <button
+                      type="button"
+                      aria-label="Clear Prep Board search"
+                      onClick={() => setPrepSearchTerm("")}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {normalizedPrepSearch && (
+                  <div className="prep-search-results" aria-live="polite">
+                    {matchingPrepSearchItems.length === 0 ? (
+                      <div className="prep-search-empty">No matching inventory items.</div>
+                    ) : (
+                      matchingPrepSearchItems.map((item) => {
+                        const itemBarcode = String(item.barcode || "");
+                        const selectedPrepItem = prepBoard.find(
+                          (boardItem) =>
+                            boardItem.inventoryItemId === item.id ||
+                            (itemBarcode && boardItem.barcode === itemBarcode)
+                        );
+                        const selectedQuantity = selectedPrepItem
+                          ? Number(selectedPrepItem.plannedQuantity) || 0
+                          : 0;
+
+                        return (
+                          <button
+                            type="button"
+                            className={`prep-search-result${selectedPrepItem ? " selected" : ""}`}
+                            key={item.id}
+                            onClick={() => addInventoryItemToPrep(item)}
+                          >
+                            <span className="prep-search-result-name">{item.name}</span>
+                            <span className="prep-search-result-context">
+                              <span><strong>{item.quantity}</strong> current</span>
+                              <span>{item.location || "Pantry"}</span>
+                              <span>{item.category || "Other"}</span>
+                            </span>
+                            <span className="prep-search-result-action">
+                              {selectedPrepItem ? `${selectedQuantity} planned · Add another` : "Add"}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="prep-board" aria-live="polite" aria-busy={prepLookupsInProgress > 0}>
                 <div className="prep-board-title-row">
                   <h3>Planned items</h3>
@@ -2137,7 +2223,7 @@ function App() {
                   <div className="prep-board-empty">
                     <span className="empty-state-icon"><NavIcon name="prep" /></span>
                     <strong>Your Prep Board is clear</strong>
-                    <p>Scan an item to plan a quantity without changing inventory.</p>
+                    <p>Scan or search for an item to plan a quantity without changing inventory.</p>
                   </div>
                 ) : (
                   <div className="prep-board-list">
