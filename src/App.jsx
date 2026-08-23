@@ -23,7 +23,6 @@ const PRIMARY_NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "home" },
   { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "inventory" },
   { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "shopping" },
-  { id: "settings", label: "Item Settings", mobileLabel: "Settings", icon: "settings" },
 ];
 
 const FUTURE_NAV_ITEMS = ["Recipes", "Activity", "Timers", "Music"];
@@ -75,6 +74,22 @@ function createItemSettingsDraft(item) {
   };
 }
 
+function createInlineInventoryDraft(item) {
+  return {
+    name: item.name || "",
+    quantity: String(item.quantity ?? ""),
+    location: item.location || "Pantry",
+    category: item.category || "Other",
+    priority: String(item.priority ?? 3),
+    targetQuantity:
+      item.target_quantity === null ||
+      item.target_quantity === undefined ||
+      item.target_quantity === ""
+        ? ""
+        : String(item.target_quantity),
+  };
+}
+
 function App() {
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -115,6 +130,11 @@ function App() {
   const [itemSettingsFeedback, setItemSettingsFeedback] = useState({});
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
   const [deletingSelectedItem, setDeletingSelectedItem] = useState(false);
+  const [expandedInventoryItemId, setExpandedInventoryItemId] = useState(null);
+  const [inlineInventoryDrafts, setInlineInventoryDrafts] = useState({});
+  const [savingInlineItemId, setSavingInlineItemId] = useState(null);
+  const [deletingInlineItemId, setDeletingInlineItemId] = useState(null);
+  const [inlineInventoryFeedback, setInlineInventoryFeedback] = useState({});
   const scannerRef = useRef(null);
   const scannerBarcodeInputRef = useRef(null);
   const stockScannerInputRef = useRef(null);
@@ -1446,7 +1466,9 @@ function App() {
       return false;
     }
 
-    setItems(items.filter((item) => item.id !== idToDelete));
+    setItems((currentItems) =>
+      currentItems.filter((item) => item.id !== idToDelete)
+    );
     return true;
   }
 
@@ -1476,6 +1498,208 @@ function App() {
   function clearInventorySearch() {
     setSearchTerm("");
     inventorySearchRef.current?.focus();
+  }
+
+  function toggleInlineInventoryEditor(item) {
+    if (expandedInventoryItemId === item.id) {
+      setExpandedInventoryItemId(null);
+      setInlineInventoryFeedback((current) => ({
+        ...current,
+        [item.id]: null,
+      }));
+      return;
+    }
+
+    setInlineInventoryDrafts((current) => ({
+      ...current,
+      [item.id]: createInlineInventoryDraft(item),
+    }));
+    setInlineInventoryFeedback((current) => ({
+      ...current,
+      [item.id]: null,
+    }));
+    setExpandedInventoryItemId(item.id);
+  }
+
+  function updateInlineInventoryDraft(item, field, value) {
+    setInlineInventoryDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        ...(current[item.id] || createInlineInventoryDraft(item)),
+        [field]: value,
+      },
+    }));
+    setInlineInventoryFeedback((current) => ({
+      ...current,
+      [item.id]: null,
+    }));
+  }
+
+  async function saveInlineInventoryItem(item) {
+    const draft =
+      inlineInventoryDrafts[item.id] || createInlineInventoryDraft(item);
+    const parsedQuantity = normalizeQuantity(draft.quantity);
+    const parsedPriority = Number(draft.priority);
+    const targetValue = String(draft.targetQuantity ?? "").trim();
+    let parsedTargetQuantity = null;
+
+    if (!draft.name.trim()) {
+      setInlineInventoryFeedback((current) => ({
+        ...current,
+        [item.id]: { type: "error", message: "Enter a product name." },
+      }));
+      return;
+    }
+
+    if (Number.isNaN(parsedQuantity) || parsedQuantity < 0) {
+      setInlineInventoryFeedback((current) => ({
+        ...current,
+        [item.id]: { type: "error", message: "Quantity must be 0 or greater." },
+      }));
+      return;
+    }
+
+    if (![1, 2, 3].includes(parsedPriority)) {
+      setInlineInventoryFeedback((current) => ({
+        ...current,
+        [item.id]: { type: "error", message: "Choose a valid priority." },
+      }));
+      return;
+    }
+
+    if (targetValue !== "") {
+      parsedTargetQuantity = Number(targetValue);
+
+      if (!Number.isFinite(parsedTargetQuantity) || parsedTargetQuantity < 0) {
+        setInlineInventoryFeedback((current) => ({
+          ...current,
+          [item.id]: {
+            type: "error",
+            message: "Target quantity must be blank or 0 or greater.",
+          },
+        }));
+        return;
+      }
+    }
+
+    setSavingInlineItemId(item.id);
+    setInlineInventoryFeedback((current) => ({
+      ...current,
+      [item.id]: null,
+    }));
+
+    try {
+      const updatedFields = {
+        name: draft.name.trim(),
+        quantity: parsedQuantity.toString(),
+        location: draft.location,
+        category: draft.category,
+        priority: parsedPriority,
+        target_quantity: parsedTargetQuantity,
+      };
+      const { error } = await supabase
+        .from("pantry_items")
+        .update(updatedFields)
+        .eq("id", item.id);
+
+      if (error) {
+        throw error;
+      }
+
+      let memoryError = null;
+
+      if (item.barcode) {
+        const memoryResult = await saveBarcodeMemory({
+          code: item.barcode,
+          productName: updatedFields.name,
+          savedCategory: updatedFields.category,
+          savedLocation: updatedFields.location,
+          savedPriority: updatedFields.priority,
+          savedTargetQuantity: updatedFields.target_quantity,
+        });
+
+        memoryError = memoryResult.error;
+      }
+
+      setPrepBoard((currentBoard) =>
+        currentBoard.map((prepItem) =>
+          prepItem.inventoryItemId === item.id
+            ? {
+                ...prepItem,
+                name: updatedFields.name,
+                currentQuantity: parsedQuantity,
+                location: updatedFields.location,
+                category: updatedFields.category,
+              }
+            : prepItem
+        )
+      );
+      await fetchItems();
+
+      if (memoryError) {
+        setInlineInventoryFeedback((current) => ({
+          ...current,
+          [item.id]: {
+            type: "error",
+            message: "Inventory saved, but barcode memory could not be updated. Try saving again.",
+          },
+        }));
+        return;
+      }
+
+      setExpandedInventoryItemId(null);
+      setInlineInventoryDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[item.id];
+        return nextDrafts;
+      });
+    } catch (error) {
+      console.log(error);
+      setInlineInventoryFeedback((current) => ({
+        ...current,
+        [item.id]: {
+          type: "error",
+          message: error.message || "Changes could not be saved.",
+        },
+      }));
+    } finally {
+      setSavingInlineItemId(null);
+    }
+  }
+
+  async function deleteInlineInventoryItem(item) {
+    const shouldDelete = window.confirm(
+      `Delete ${item.name} from inventory? This cannot be undone.`
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setDeletingInlineItemId(item.id);
+    const wasDeleted = await deleteItem(item.id);
+    setDeletingInlineItemId(null);
+
+    if (!wasDeleted) {
+      return;
+    }
+
+    setPrepBoard((currentBoard) =>
+      currentBoard.map((prepItem) =>
+        prepItem.inventoryItemId === item.id
+          ? {
+              ...prepItem,
+              inventoryItemId: null,
+              currentQuantity: 0,
+              isInInventory: false,
+            }
+          : prepItem
+      )
+    );
+    setExpandedInventoryItemId(null);
+    setSelectedInventoryItem((currentItem) =>
+      currentItem?.id === item.id ? null : currentItem
+    );
   }
 
   function getItemSettingsDraft(item) {
@@ -2682,9 +2906,6 @@ function App() {
                   <h2 id="inventory-heading">Inventory</h2>
                 </div>
                 <div className="inventory-toolbar-actions">
-                  <button type="button" className="secondary-button" onClick={() => navigateToSection("settings")}>
-                    Item Settings
-                  </button>
                   <button type="button" className="secondary-button" onClick={() => setShowInventory(!showInventory)}>
                     {showInventory ? "Hide Inventory" : "Show Inventory"}
                   </button>
@@ -2759,10 +2980,17 @@ function App() {
                               const prepQuantity = prepItem
                                 ? Number(prepItem.plannedQuantity) || 0
                                 : 0;
+                              const isExpanded = expandedInventoryItemId === item.id;
+                              const inlineDraft =
+                                inlineInventoryDrafts[item.id] ||
+                                createInlineInventoryDraft(item);
+                              const inlineFeedback = inlineInventoryFeedback[item.id];
+                              const isSavingInline = savingInlineItemId === item.id;
+                              const isDeletingInline = deletingInlineItemId === item.id;
 
                               return (
                                 <article
-                                  className={`inventory-card-shell${prepItem ? " on-prep-board" : ""}`}
+                                  className={`inventory-card-shell${prepItem ? " on-prep-board" : ""}${isExpanded ? " expanded" : ""}`}
                                   key={item.id}
                                 >
                                   <button
@@ -2778,20 +3006,160 @@ function App() {
                                     </div>
                                   </button>
 
-                                  <button
-                                    type="button"
-                                    className={`inventory-prep-action${prepItem ? " active" : ""}`}
-                                    aria-label={`Add ${item.name} to Prep Board${prepItem ? `, currently ${prepQuantity}` : ""}`}
-                                    title="Add to Prep Board"
-                                    onClick={() => addInventoryItemToPrep(item)}
-                                  >
-                                    <NavIcon name="prep" />
-                                    {prepItem && (
-                                      <span className="inventory-prep-badge" aria-hidden="true">
-                                        {prepQuantity}
-                                      </span>
-                                    )}
-                                  </button>
+                                  <div className="inventory-card-actions">
+                                    <button
+                                      type="button"
+                                      className={`inventory-prep-action${prepItem ? " active" : ""}`}
+                                      aria-label={`Add ${item.name} to Prep Board${prepItem ? `, currently ${prepQuantity}` : ""}`}
+                                      title="Add to Prep Board"
+                                      onClick={() => addInventoryItemToPrep(item)}
+                                    >
+                                      <NavIcon name="prep" />
+                                      {prepItem && (
+                                        <span className="inventory-prep-badge" aria-hidden="true">
+                                          {prepQuantity}
+                                        </span>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`inventory-expand-action${isExpanded ? " active" : ""}`}
+                                      aria-label={`${isExpanded ? "Collapse" : "Edit"} ${item.name}`}
+                                      aria-expanded={isExpanded}
+                                      aria-controls={`inventory-editor-${item.id}`}
+                                      title={isExpanded ? "Collapse item" : "Edit item"}
+                                      onClick={() => toggleInlineInventoryEditor(item)}
+                                    >
+                                      <NavIcon name="chevron" />
+                                    </button>
+                                  </div>
+
+                                  {isExpanded && (
+                                    <form
+                                      id={`inventory-editor-${item.id}`}
+                                      className="inventory-inline-editor"
+                                      onSubmit={(event) => {
+                                        event.preventDefault();
+                                        saveInlineInventoryItem(item);
+                                      }}
+                                    >
+                                      <div className="inventory-inline-fields">
+                                        <label>
+                                          Product name
+                                          <input
+                                            type="text"
+                                            required
+                                            value={inlineDraft.name}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "name", event.target.value)
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          Quantity
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            required
+                                            value={inlineDraft.quantity}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "quantity", event.target.value)
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          Location
+                                          <select
+                                            value={inlineDraft.location}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "location", event.target.value)
+                                            }
+                                          >
+                                            {LOCATION_OPTIONS.map((option) => (
+                                              <option key={option}>{option}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label>
+                                          Category
+                                          <select
+                                            value={inlineDraft.category}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "category", event.target.value)
+                                            }
+                                          >
+                                            {CATEGORY_OPTIONS.map((option) => (
+                                              <option key={option}>{option}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label>
+                                          Priority
+                                          <select
+                                            value={inlineDraft.priority}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "priority", event.target.value)
+                                            }
+                                          >
+                                            {PRIORITY_OPTIONS.map((option) => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label>
+                                          Target quantity
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            placeholder="Unset"
+                                            value={inlineDraft.targetQuantity}
+                                            onChange={(event) =>
+                                              updateInlineInventoryDraft(item, "targetQuantity", event.target.value)
+                                            }
+                                          />
+                                        </label>
+                                      </div>
+
+                                      {item.barcode && (
+                                        <div className="inventory-inline-barcode">
+                                          <span>Barcode</span>
+                                          <code>{item.barcode}</code>
+                                        </div>
+                                      )}
+
+                                      {inlineFeedback && (
+                                        <p className={`inventory-inline-feedback ${inlineFeedback.type}`} role="alert">
+                                          {inlineFeedback.message}
+                                        </p>
+                                      )}
+
+                                      <div className="inventory-inline-actions">
+                                        <button type="submit" disabled={isSavingInline || isDeletingInline}>
+                                          {isSavingInline ? "Saving..." : "Save Changes"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="delete-button"
+                                          disabled={isSavingInline || isDeletingInline}
+                                          onClick={() => deleteInlineInventoryItem(item)}
+                                        >
+                                          {isDeletingInline ? "Deleting..." : "Delete Item"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="secondary-button"
+                                          disabled={isSavingInline || isDeletingInline}
+                                          onClick={() => toggleInlineInventoryEditor(item)}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </form>
+                                  )}
                                 </article>
                               );
                             })}

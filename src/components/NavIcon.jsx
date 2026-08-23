@@ -34,6 +34,7 @@ function NavIcon({ name }) {
         <path d="M8 8.5h4M8 12h8M8 15.5h6" />
       </>
     ),
+    chevron: <path d="m7.5 9 4.5 4.5L16.5 9" />,
     add: (
       <>
         <circle cx="12" cy="12" r="9" />
