@@ -75,6 +75,7 @@ function App() {
   const [location, setLocation] = useState("Pantry");
   const [category, setCategory] = useState("Other");
   const [barcode, setBarcode] = useState("");
+  const [scannerBarcode, setScannerBarcode] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -100,11 +101,24 @@ function App() {
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
   const [deletingSelectedItem, setDeletingSelectedItem] = useState(false);
   const scannerRef = useRef(null);
+  const scannerBarcodeInputRef = useRef(null);
   const inventorySearchRef = useRef(null);
 
   useEffect(() => {
     fetchItems();
   }, []);
+
+  useEffect(() => {
+    if (activeSection !== "add" || showScanner) {
+      return undefined;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      scannerBarcodeInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeSection, showScanner]);
 
   useEffect(() => {
     if (!selectedInventoryItem) {
@@ -453,7 +467,9 @@ function App() {
           const cameras = await Html5Qrcode.getCameras();
 
           if (!cameras || cameras.length === 0) {
-            throw new Error("No cameras were found.");
+            throw new Error("No cameras were found.", {
+              cause: environmentError,
+            });
           }
 
           const rearCamera = findRearCamera(cameras);
@@ -541,6 +557,34 @@ function App() {
     } catch (error) {
       console.log(error);
       alert("Lookup failed");
+    }
+  }
+
+  async function submitScannerBarcode(event) {
+    event.preventDefault();
+
+    const completedBarcode = scannerBarcode.trim();
+
+    if (!completedBarcode) {
+      scannerBarcodeInputRef.current?.focus();
+      return;
+    }
+
+    setScannerBarcode("");
+    scannerBarcodeInputRef.current?.focus();
+
+    if (!/^\d+$/.test(completedBarcode)) {
+      alert("A barcode can only contain numbers.");
+      scannerBarcodeInputRef.current?.focus();
+      return;
+    }
+
+    setBarcode(completedBarcode);
+
+    try {
+      await lookupBarcode(completedBarcode);
+    } finally {
+      scannerBarcodeInputRef.current?.focus();
     }
   }
 
@@ -1181,6 +1225,24 @@ function App() {
                 <h2 id="add-item-heading">{editingId !== null ? "Edit Item" : "Add Item"}</h2>
                 <p className="barcode-value">Barcode: {barcode || "None"}</p>
               </div>
+
+              <form className="bluetooth-scanner-form" onSubmit={submitScannerBarcode}>
+                <label htmlFor="scanner-barcode-input">
+                  Bluetooth Barcode Scanner
+                  <input
+                    id="scanner-barcode-input"
+                    ref={scannerBarcodeInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    placeholder="Scan a barcode or enter its number"
+                    value={scannerBarcode}
+                    onChange={(event) => setScannerBarcode(event.target.value)}
+                  />
+                </label>
+                <p>Scans are looked up when the scanner sends Enter. Products are not added automatically.</p>
+              </form>
 
               <div className="add-item-row">
                 <label>
