@@ -23,10 +23,7 @@ const PRIMARY_NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", mobileLabel: "Home", icon: "home" },
   { id: "inventory", label: "Inventory", mobileLabel: "Inventory", icon: "inventory" },
   { id: "shopping", label: "Shopping List", mobileLabel: "Shopping", icon: "shopping" },
-  { id: "stock", label: "Stock", mobileLabel: "Stock", icon: "stock" },
-  { id: "add", label: "Add Item", mobileLabel: "Add", icon: "add" },
-  { id: "use", label: "Use", mobileLabel: "Use", icon: "use" },
-  { id: "settings", label: "Item Settings", icon: "settings" },
+  { id: "settings", label: "Item Settings", mobileLabel: "Settings", icon: "settings" },
 ];
 
 const FUTURE_NAV_ITEMS = ["Recipes", "Activity", "Timers", "Music"];
@@ -42,7 +39,7 @@ const SECTION_DETAILS = {
   },
   shopping: {
     title: "Shopping List",
-    subtitle: "Build a list from the quantities you already track.",
+    subtitle: "Shopping-list planning is coming in a future update.",
   },
   stock: {
     title: "Stock",
@@ -58,7 +55,7 @@ const SECTION_DETAILS = {
   },
   settings: {
     title: "Item Settings",
-    subtitle: "Manage restock targets and shopping priority.",
+    subtitle: "Manage item preferences and prepare future organization tools.",
   },
 };
 
@@ -88,10 +85,6 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [showInventory, setShowInventory] = useState(false);
   const [priority, setPriority] = useState("3");
-  const [shoppingListType, setShoppingListType] = useState("");
-  const [selectedPurchasedItems, setSelectedPurchasedItems] = useState({});
-  const [purchasedQuantities, setPurchasedQuantities] = useState({});
-  const [savingPurchasedItems, setSavingPurchasedItems] = useState(false);
   const [scannerMode, setScannerMode] = useState("add");
   const [stockScannerBarcode, setStockScannerBarcode] = useState("");
   const [stockBatch, setStockBatch] = useState([]);
@@ -1308,96 +1301,6 @@ function App() {
     }
   }
 
-  function getShoppingListTitle() {
-    if (shoppingListType === "quick") return "Quick Shopping List";
-    if (shoppingListType === "medium") return "Medium Shopping List";
-    if (shoppingListType === "full") return "Full Shopping List";
-    return "";
-  }
-
-  function togglePurchasedItem(item) {
-    const isCurrentlySelected = Boolean(selectedPurchasedItems[item.id]);
-
-    setSelectedPurchasedItems((current) => ({
-      ...current,
-      [item.id]: !isCurrentlySelected,
-    }));
-
-    if (!isCurrentlySelected && purchasedQuantities[item.id] === undefined) {
-      setPurchasedQuantities((current) => ({
-        ...current,
-        [item.id]: getSuggestedBuyAmount(item),
-      }));
-    }
-  }
-
-  function updatePurchasedQuantity(itemId, value) {
-    setPurchasedQuantities((current) => ({
-      ...current,
-      [itemId]: value,
-    }));
-  }
-
-  async function addPurchasedItemsToPantry() {
-    const selectedItems = shoppingListItems.filter(
-      (item) => selectedPurchasedItems[item.id]
-    );
-
-    if (selectedItems.length === 0) {
-      alert("Check at least one purchased item first.");
-      return;
-    }
-
-    for (const item of selectedItems) {
-      const purchasedAmount = normalizeQuantity(
-        purchasedQuantities[item.id]
-      );
-
-      if (Number.isNaN(purchasedAmount) || purchasedAmount <= 0) {
-        alert(`Enter a purchased quantity greater than 0 for ${item.name}.`);
-        return;
-      }
-    }
-
-    setSavingPurchasedItems(true);
-
-    try {
-      const updateResults = await Promise.all(
-        selectedItems.map(async (item) => {
-          const currentQuantity = normalizeQuantity(item.quantity || "0");
-          const purchasedAmount = normalizeQuantity(
-            purchasedQuantities[item.id]
-          );
-          const newQuantity = currentQuantity + purchasedAmount;
-
-          return supabase
-            .from("pantry_items")
-            .update({
-              quantity: newQuantity.toString(),
-            })
-            .eq("id", item.id);
-        })
-      );
-
-      const failedUpdate = updateResults.find((result) => result.error);
-
-      if (failedUpdate) {
-        alert(failedUpdate.error.message);
-        return;
-      }
-
-      await fetchItems();
-      setSelectedPurchasedItems({});
-      setPurchasedQuantities({});
-      alert("Purchased items were added to your pantry.");
-    } catch (error) {
-      console.log(error);
-      alert("The purchased items could not be added.");
-    } finally {
-      setSavingPurchasedItems(false);
-    }
-  }
-
   function selectItemToUse(item) {
     setSelectedUseItem(item);
     setUseSearchTerm(item.name || "");
@@ -1467,7 +1370,6 @@ function App() {
         .slice(0, 8)
     : [];
 
-  const shoppingListItems = selectShoppingListItems(items, shoppingListType);
   const dashboardShoppingItems = selectShoppingListItems(items, "full");
   const dashboardAttentionItems = items
     .filter((item) => {
@@ -1597,7 +1499,13 @@ function App() {
           </div>
         </header>
 
-        <main className="main-content">
+        <main
+          className={`main-content${
+            activeSection === "dashboard" || activeSection === "inventory"
+              ? " has-floating-actions"
+              : ""
+          }`}
+        >
           {showScanner && (
             <div className="scanner-panel">
               <h2>{scannerMode === "use" ? "Scan Item to Use" : "Scanner Window"}</h2>
@@ -1729,29 +1637,6 @@ function App() {
                 </div>
               </div>
 
-              <div className="dashboard-floating-actions" aria-label="Pantry modes">
-                <button
-                  type="button"
-                  className="dashboard-floating-action stock-action"
-                  onClick={() => navigateToSection("stock")}
-                >
-                  <span className="dashboard-floating-icon" aria-hidden="true">
-                    <NavIcon name="stock" />
-                  </span>
-                  <span>Stock</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="dashboard-floating-action use-action"
-                  onClick={() => navigateToSection("use")}
-                >
-                  <span className="dashboard-floating-icon" aria-hidden="true">
-                    <NavIcon name="use" />
-                  </span>
-                  <span>Use</span>
-                </button>
-              </div>
             </section>
           )}
 
@@ -2130,80 +2015,11 @@ function App() {
           )}
 
           {activeSection === "shopping" && (
-            <section className="feature-panel" aria-labelledby="shopping-heading">
-              <div className="shopping-list-controls">
-                <div className="panel-heading">
-                  <span className="eyebrow">Restock planning</span>
-                  <h2 id="shopping-heading">Generate Shopping List</h2>
-                </div>
-                <div className="shopping-list-buttons">
-                  <button className={`shopping-list-choice${shoppingListType === "quick" ? " active" : ""}`} aria-pressed={shoppingListType === "quick"} onClick={() => setShoppingListType("quick")}><strong>Quick</strong><span>High priority</span></button>
-                  <button className={`shopping-list-choice${shoppingListType === "medium" ? " active" : ""}`} aria-pressed={shoppingListType === "medium"} onClick={() => setShoppingListType("medium")}><strong>Medium</strong><span>High + medium</span></button>
-                  <button className={`shopping-list-choice${shoppingListType === "full" ? " active" : ""}`} aria-pressed={shoppingListType === "full"} onClick={() => setShoppingListType("full")}><strong>Full</strong><span>Everything needed</span></button>
-                  {shoppingListType && <button className="secondary-button hide-list-button" onClick={() => setShoppingListType("")}>Hide List</button>}
-                </div>
-              </div>
-
-              {!shoppingListType ? (
-                <div className="shopping-list-prompt">
-                  <span className="empty-state-icon"><NavIcon name="shopping" /></span>
-                  <div>
-                    <strong>Choose a list to get started</strong>
-                    <p>Your existing priority and target settings determine what appears.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="shopping-list">
-                  <div className="shopping-list-title-row">
-                    <div>
-                      <span className="eyebrow">Selected list</span>
-                      <h2>{getShoppingListTitle()}</h2>
-                    </div>
-                    <span className="shopping-list-count">{shoppingListItems.length} {shoppingListItems.length === 1 ? "item" : "items"}</span>
-                  </div>
-                  {shoppingListItems.length === 0 ? (
-                    <div className="shopping-empty-state">
-                      <span className="empty-state-icon"><NavIcon name="shopping" /></span>
-                      <strong>Nothing to buy right now</strong>
-                      <p>No items are currently needed for this list.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="shopping-items-list">
-                        {shoppingListItems.map((item) => {
-                          const suggestedBuyAmount = getSuggestedBuyAmount(item);
-                          const purchasedValue = purchasedQuantities[item.id] ?? suggestedBuyAmount;
-                          const isPurchased = Boolean(selectedPurchasedItems[item.id]);
-
-                          return (
-                            <div key={item.id} className={`shopping-list-item${isPurchased ? " purchased" : ""}`}>
-                              <label className="shopping-purchase-toggle">
-                                <input className="shopping-checkbox" type="checkbox" checked={isPurchased} onChange={() => togglePurchasedItem(item)} aria-label={`Mark ${item.name} as purchased`} />
-                                <span>Bought</span>
-                              </label>
-                              <div className="shopping-item-main">
-                                <strong>{item.name}</strong>
-                                <span>{item.category || "Other"}</span>
-                              </div>
-                              <div className="shopping-needed">
-                                <span>Need</span>
-                                <strong>{suggestedBuyAmount}</strong>
-                              </div>
-                              <label className="purchased-quantity-control">
-                                <span>Purchased quantity</span>
-                                <input className="purchased-quantity-input" type="number" min="1" step="0.1" value={purchasedValue} onChange={(e) => updatePurchasedQuantity(item.id, e.target.value)} />
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <button className="add-purchased-button" onClick={addPurchasedItemsToPantry} disabled={savingPurchasedItems}>
-                        {savingPurchasedItems ? "Adding Items..." : "Add Purchased Items to Pantry"}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+            <section className="feature-panel shopping-placeholder" aria-labelledby="shopping-heading">
+              <span className="empty-state-icon"><NavIcon name="shopping" /></span>
+              <span className="eyebrow">Coming later</span>
+              <h2 id="shopping-heading">Shopping List</h2>
+              <p>Shopping-list planning will be available here in a future update.</p>
             </section>
           )}
 
@@ -2212,7 +2028,7 @@ function App() {
               <div className="panel-heading">
                 <span className="eyebrow">Restock preferences</span>
                 <h2 id="settings-heading">Item Settings</h2>
-                <p>Set shopping priority and target quantity without changing the item itself.</p>
+                <p>Set priority and target quantity now. More product, category, and location tools can live here later.</p>
               </div>
 
               <div className="settings-controls">
@@ -2433,6 +2249,37 @@ function App() {
               )}
             </section>
           )}
+
+          {(activeSection === "dashboard" || activeSection === "inventory") && (
+            <div className="dashboard-floating-actions" aria-label="Pantry modes">
+              <button
+                type="button"
+                className="dashboard-floating-action stock-action"
+                onClick={() => navigateToSection("stock")}
+              >
+                <span className="dashboard-floating-icon" aria-hidden="true">
+                  <NavIcon name="stock" />
+                </span>
+                <span>Stock</span>
+              </button>
+
+              <button
+                type="button"
+                className={`dashboard-floating-action use-action${
+                  activeSection === "inventory" ? " inventory-use-drop-target" : ""
+                }`}
+                data-future-drop-target={
+                  activeSection === "inventory" ? "inventory-use" : undefined
+                }
+                onClick={() => navigateToSection("use")}
+              >
+                <span className="dashboard-floating-icon" aria-hidden="true">
+                  <NavIcon name="use" />
+                </span>
+                <span>Use</span>
+              </button>
+            </div>
+          )}
         </main>
       </div>
 
@@ -2510,7 +2357,7 @@ function App() {
       )}
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {PRIMARY_NAV_ITEMS.filter((item) => item.id !== "settings").map((item) => (
+        {PRIMARY_NAV_ITEMS.map((item) => (
           <button
             key={item.id}
             type="button"
