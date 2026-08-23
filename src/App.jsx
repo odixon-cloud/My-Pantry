@@ -1729,37 +1729,29 @@ function App() {
                 </div>
               </div>
 
-              <section className="dashboard-mode-actions" aria-label="Pantry modes">
+              <div className="dashboard-floating-actions" aria-label="Pantry modes">
                 <button
                   type="button"
-                  className="dashboard-mode-card stock-card"
+                  className="dashboard-floating-action stock-action"
                   onClick={() => navigateToSection("stock")}
                 >
-                  <span className="dashboard-mode-icon" aria-hidden="true">
+                  <span className="dashboard-floating-icon" aria-hidden="true">
                     <NavIcon name="stock" />
                   </span>
-                  <span className="dashboard-mode-copy">
-                    <strong>Stock</strong>
-                    <small>Add groceries</small>
-                  </span>
-                  <span className="dashboard-mode-arrow" aria-hidden="true">→</span>
+                  <span>Stock</span>
                 </button>
 
                 <button
                   type="button"
-                  className="dashboard-mode-card use-card"
+                  className="dashboard-floating-action use-action"
                   onClick={() => navigateToSection("use")}
                 >
-                  <span className="dashboard-mode-icon" aria-hidden="true">
+                  <span className="dashboard-floating-icon" aria-hidden="true">
                     <NavIcon name="use" />
                   </span>
-                  <span className="dashboard-mode-copy">
-                    <strong>Use</strong>
-                    <small>Use pantry items</small>
-                  </span>
-                  <span className="dashboard-mode-arrow" aria-hidden="true">→</span>
+                  <span>Use</span>
                 </button>
-              </section>
+              </div>
             </section>
           )}
 
